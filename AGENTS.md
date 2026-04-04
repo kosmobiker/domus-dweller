@@ -13,7 +13,10 @@ Execution checklist: [docs/agent-todos.md](/home/user/domus-dweller/docs/agent-t
 - Geography for v1 is Krakow plus an approximate 30 km radius.
 - Daily ingestion is the default cadence for v1.
 - Seller classification is mandatory: every listing should be labeled at least as `private`, `professional`, or `unknown`.
-- Before any database bootstrap or ingest run, ask the user to configure Neon environment variables.
+- Current active source is OLX only; keep other sources deferred until OLX flow is stable.
+- Bronze storage target is BigQuery (`rent_bronze`, `sale_bronze`).
+- Do not require Neon environment variables for current bootstrap/ingest flows.
+- Keep ingestion parse-only from search pages for now; detail-page enrichment is disabled in runtime flow.
 - Prefer TDD: write or update failing tests before implementing parser, normalization, or schema behavior.
 - Prefer functional and integration tests over fine-grained unit tests.
 - Keep source-specific scraping logic isolated from normalization and analytics logic.
@@ -40,7 +43,7 @@ Owns source adapters:
 - fetching listings
 - parsing listing payloads
 - handling throttling and retries
-- storing raw snapshots
+- storing parse artifacts for sink job handoff
 - source health checks
 
 ### 3. Data Agent
