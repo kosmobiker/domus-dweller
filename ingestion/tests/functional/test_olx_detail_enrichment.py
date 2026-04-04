@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import httpx
 from domus_dweller.sources.olx import enrich
 from domus_dweller.sources.olx.parser import parse_detail_page
 
@@ -253,3 +254,124 @@ def test_given_rent_mode_when_enriching_then_mode_specific_params_are_kept_in_re
     assert enriched[0]["detail_params_rent"]["czynsz (dodatkowo)"] == "700 zł"
     assert enriched[0]["detail_params_rent"]["preferowani"] == "Studenci"
     assert enriched[0]["detail_params_sale"] == {}
+
+
+def test_given_detail_403_when_enriching_then_listing_is_kept_and_processing_continues(
+    monkeypatch,
+) -> None:
+    # Given
+    first = {
+        "source": "olx",
+        "source_listing_id": "olx-403",
+        "source_url": "https://www.olx.pl/d/oferta/blocked-CID3-ID403.html",
+        "title": "Blocked",
+        "seller_segment": "unknown",
+    }
+    second = {
+        "source": "olx",
+        "source_listing_id": "olx-ok",
+        "source_url": "https://www.olx.pl/d/oferta/ok-CID3-ID200.html",
+        "title": "OK",
+        "seller_segment": "unknown",
+    }
+
+    ok_html = """
+    <html><body>
+      <p data-nx-name="P3">Powierzchnia: 37 m²</p>
+      <p data-nx-name="P3">Liczba pokoi: 2</p>
+    </body></html>
+    """
+
+    def _fake_fetch_html(url: str, *_args, **_kwargs) -> str:
+        if "ID403" in url:
+            request = httpx.Request("GET", url)
+            response = httpx.Response(status_code=403, request=request)
+            raise httpx.HTTPStatusError("forbidden", request=request, response=response)
+        return ok_html
+
+    monkeypatch.setattr(enrich, "_fetch_html", _fake_fetch_html)
+
+    # When
+    enriched = enrich.enrich_listings(
+        [first, second],
+        save_html_dir=None,
+        pause_ms=0,
+        timeout_sec=5.0,
+        default_mode="rent",
+    )
+
+    # Then
+    assert len(enriched) == 2
+    assert enriched[0]["source_listing_id"] == "olx-403"
+    assert "area_sqm" not in enriched[0]
+    assert enriched[1]["source_listing_id"] == "olx-ok"
+    assert enriched[1]["area_sqm"] == 37.0
+    assert enriched[1]["rooms"] == 2.0
+
+
+def test_given_detail_403_in_cli_when_running_then_job_does_not_fail_and_output_is_written(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    # Given
+    input_path = tmp_path / "olx_all.json"
+    output_path = tmp_path / "olx_all_enriched.json"
+    input_path.write_text(
+        json.dumps(
+            [
+                {
+                    "source": "olx",
+                    "source_listing_id": "olx-403",
+                    "source_url": "https://www.olx.pl/d/oferta/blocked-CID3-ID403.html",
+                    "title": "Blocked",
+                },
+                {
+                    "source": "olx",
+                    "source_listing_id": "olx-ok",
+                    "source_url": "https://www.olx.pl/d/oferta/ok-CID3-ID200.html",
+                    "title": "OK",
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    ok_html = """
+    <html><body>
+      <p data-nx-name="P3">Powierzchnia: 41 m²</p>
+      <p data-nx-name="P3">Liczba pokoi: 2</p>
+    </body></html>
+    """
+
+    def _fake_fetch_html(url: str, *_args, **_kwargs) -> str:
+        if "ID403" in url:
+            request = httpx.Request("GET", url)
+            response = httpx.Response(status_code=403, request=request)
+            raise httpx.HTTPStatusError("forbidden", request=request, response=response)
+        return ok_html
+
+    monkeypatch.setattr(enrich, "_fetch_html", _fake_fetch_html)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "enrich_olx",
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--pause-ms",
+            "0",
+            "--mode",
+            "rent",
+        ],
+    )
+
+    # When
+    enrich.main()
+
+    # Then
+    enriched = json.loads(output_path.read_text(encoding="utf-8"))
+    assert len(enriched) == 2
+    assert enriched[0]["source_listing_id"] == "olx-403"
+    assert enriched[1]["source_listing_id"] == "olx-ok"
+    assert enriched[1]["area_sqm"] == 41.0

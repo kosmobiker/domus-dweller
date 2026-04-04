@@ -182,7 +182,20 @@ def enrich_listings(
                 enriched_rows.append(dict(listing))
                 continue
 
-            raw_html = _fetch_html(source_url, client, timeout_sec=timeout_sec)
+            try:
+                raw_html = _fetch_html(source_url, client, timeout_sec=timeout_sec)
+            except httpx.HTTPStatusError as exc:
+                status_code = exc.response.status_code if exc.response is not None else None
+                if status_code in {403, 404}:
+                    print(
+                        f"[enrich] Skipping detail page for listing due to HTTP {status_code}: "
+                        f"{source_url}"
+                    )
+                    enriched_rows.append(dict(listing))
+                    if pause_ms > 0 and index < len(listings) - 1:
+                        time.sleep(pause_ms / 1000)
+                    continue
+                raise
             if save_html_dir is not None:
                 source_listing_id = str(listing.get("source_listing_id", "")).strip()
                 file_name = source_listing_id if source_listing_id else f"listing_{index + 1}"
