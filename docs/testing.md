@@ -18,7 +18,7 @@ Preferred order:
 - verify seller classification behavior
 
 2. Ingestion orchestration functional tests
-- validate search collection, dedup-in-memory, enrichment wiring
+- validate search collection, dedup-in-memory, and sink wiring
 - validate mode routing (`rent` vs `sale`)
 
 3. BigQuery sink functional tests

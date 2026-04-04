@@ -8,7 +8,6 @@ import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from domus_dweller.sinks.bigquery import load_rows_to_bigquery
-from domus_dweller.sources.olx.enrich import enrich_listings
 from domus_dweller.sources.olx.parser import parse_search_results
 
 OLX_BASE_URL = "https://www.olx.pl/nieruchomosci"
@@ -31,7 +30,7 @@ DEFAULT_SALE_PROPERTY_TYPES = ("mieszkania", "domy")
 
 def _build_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fetch, parse, enrich OLX listings and load rows directly to BigQuery."
+        description="Fetch and parse OLX listings, then load rows directly to BigQuery."
     )
     parser.add_argument("--mode", choices=("rent", "sale", "both"), default="both")
     parser.add_argument("--project", required=True, help="BigQuery project id.")
@@ -46,9 +45,7 @@ def _build_args() -> argparse.Namespace:
         help="Snapshot date in YYYY-MM-DD. Defaults to current date.",
     )
     parser.add_argument("--pages", type=int, default=30)
-    parser.add_argument("--pause-ms", type=int, default=250)
     parser.add_argument("--search-timeout-sec", type=float, default=20.0)
-    parser.add_argument("--detail-timeout-sec", type=float, default=20.0)
     parser.add_argument("--cities", nargs="+", default=list(DEFAULT_CITIES))
     parser.add_argument(
         "--property-types-rent",
@@ -156,9 +153,7 @@ def run_olx_mode_to_bigquery(
     cities: list[str],
     property_types: list[str],
     pages: int,
-    pause_ms: int,
     search_timeout_sec: float,
-    detail_timeout_sec: float,
     snapshot_date: date,
 ) -> int:
     search_rows = _collect_search_rows(
@@ -169,15 +164,8 @@ def run_olx_mode_to_bigquery(
         search_timeout_sec=search_timeout_sec,
     )
     print(f"[olx:{mode}] Search rows collected: {len(search_rows)}")
-    enriched_rows = enrich_listings(
-        search_rows,
-        save_html_dir=None,
-        pause_ms=pause_ms,
-        timeout_sec=detail_timeout_sec,
-        default_mode=mode,
-    )
     prepared_rows = _prepare_rows_for_load(
-        enriched_rows,
+        search_rows,
         mode=mode,
         snapshot_date=snapshot_date,
     )
@@ -209,9 +197,7 @@ def main() -> None:
             cities=args.cities,
             property_types=property_types,
             pages=args.pages,
-            pause_ms=args.pause_ms,
             search_timeout_sec=args.search_timeout_sec,
-            detail_timeout_sec=args.detail_timeout_sec,
             snapshot_date=snapshot_date,
         )
         total_inserted += inserted

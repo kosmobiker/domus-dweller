@@ -75,6 +75,16 @@ def _build_args() -> argparse.Namespace:
             "Use `rent`/`sale` when known, otherwise `auto`."
         ),
     )
+    parser.add_argument(
+        "--max-consecutive-403",
+        type=int,
+        default=8,
+        help=(
+            "Fail-fast guard for blocked detail fetches. "
+            "When this many 403 responses occur in a row, stop detail fetching and "
+            "keep remaining listings unchanged. Set 0 to disable."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -166,6 +176,7 @@ def enrich_listings(
     pause_ms: int,
     timeout_sec: float,
     default_mode: str | None,
+    max_consecutive_403: int = 8,
 ) -> list[dict[str, Any]]:
     if save_html_dir is not None:
         save_html_dir.mkdir(parents=True, exist_ok=True)
@@ -175,10 +186,12 @@ def enrich_listings(
         follow_redirects=True,
         headers={"User-Agent": USER_AGENT},
     ) as client:
+        consecutive_403 = 0
         for index, listing in enumerate(listings):
             print(f"[enrich] Processing {index + 1}/{len(listings)}")
             source_url = str(listing.get("source_url", "")).strip()
             if not source_url:
+                consecutive_403 = 0
                 enriched_rows.append(dict(listing))
                 continue
 
@@ -192,10 +205,23 @@ def enrich_listings(
                         f"{source_url}"
                     )
                     enriched_rows.append(dict(listing))
+                    if status_code == 403:
+                        consecutive_403 += 1
+                        if max_consecutive_403 > 0 and consecutive_403 >= max_consecutive_403:
+                            print(
+                                "[enrich] Consecutive 403 threshold reached. "
+                                "Stopping detail fetches and preserving remaining rows."
+                            )
+                            for tail_listing in listings[index + 1 :]:
+                                enriched_rows.append(dict(tail_listing))
+                            break
+                    else:
+                        consecutive_403 = 0
                     if pause_ms > 0 and index < len(listings) - 1:
                         time.sleep(pause_ms / 1000)
                     continue
                 raise
+            consecutive_403 = 0
             if save_html_dir is not None:
                 source_listing_id = str(listing.get("source_listing_id", "")).strip()
                 file_name = source_listing_id if source_listing_id else f"listing_{index + 1}"
@@ -230,6 +256,7 @@ def main() -> None:
         pause_ms=args.pause_ms,
         timeout_sec=args.timeout_sec,
         default_mode=mode,
+        max_consecutive_403=args.max_consecutive_403,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(

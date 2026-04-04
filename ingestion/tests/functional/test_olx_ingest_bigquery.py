@@ -137,7 +137,7 @@ def test_given_seed_when_page_parse_is_empty_then_collection_stops_for_seed(monk
     assert len(calls) == 1
 
 
-def test_given_mode_pipeline_when_running_then_collect_enrich_and_sink_are_wired(
+def test_given_mode_pipeline_when_running_then_collect_and_sink_are_wired(
     monkeypatch,
 ) -> None:
     # Given
@@ -155,12 +155,6 @@ def test_given_mode_pipeline_when_running_then_collect_enrich_and_sink_are_wired
             }
         ],
     )
-    monkeypatch.setattr(
-        ingest_bigquery,
-        "enrich_listings",
-        lambda rows, **kwargs: [dict(rows[0], description="desc")],
-    )
-
     def _fake_load(rows, *, mode, project, dataset, snapshot_date):
         captured["rows"] = rows
         captured["mode"] = mode
@@ -179,9 +173,7 @@ def test_given_mode_pipeline_when_running_then_collect_enrich_and_sink_are_wired
         cities=["krakow"],
         property_types=["mieszkania"],
         pages=1,
-        pause_ms=100,
         search_timeout_sec=20.0,
-        detail_timeout_sec=20.0,
         snapshot_date=date(2026, 4, 4),
     )
 
@@ -212,9 +204,7 @@ def test_given_mode_both_when_running_main_then_both_tracks_are_executed(
             dataset="bronze",
             snapshot_date="2026-04-04",
             pages=2,
-            pause_ms=250,
             search_timeout_sec=20.0,
-            detail_timeout_sec=20.0,
             cities=["krakow"],
             property_types_rent=["mieszkania", "pokoje"],
             property_types_sale=["mieszkania"],

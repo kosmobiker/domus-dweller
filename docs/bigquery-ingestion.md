@@ -14,7 +14,7 @@ Both live under a single dataset (default: `bronze`) and include:
 
 - source identity (`source`, `source_listing_id`, `source_url`)
 - temporal metadata (`snapshot_date`, `ingested_at`, `layer`, `mode`)
-- parsed/enriched listing fields
+- parsed listing fields
 - raw debug payload (`raw_json`)
 - stable payload fingerprint (`payload_hash`)
 
@@ -38,7 +38,7 @@ Required runtime args:
 
 Two-job GitHub Actions shape:
 
-1. Parse+enrich job
+1. Parse job
 2. Sink-to-BigQuery job
 
 The repository now provides exactly two operational Make commands for that flow:

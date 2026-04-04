@@ -66,9 +66,7 @@ define run_olx_job
 		done; \
 	done
 	@echo "[OLX $(1)] Merge search pages"
-	@uv run python -m domus_dweller.merge_pages --pattern "data/parsed/$(DATE)/olx_$(1)_*_page_*.json" --output data/parsed/$(DATE)/olx_$(1)_all_search.json
-	@echo "[OLX $(1)] Enrich from detail pages"
-	@uv run python -m domus_dweller.sources.olx.enrich --input data/parsed/$(DATE)/olx_$(1)_all_search.json --output data/parsed/$(DATE)/olx_$(1)_all.json --save-html-dir data/raw/$(DATE)/olx_$(1)_details --pause-ms $(ENRICH_PAUSE_MS) --mode $(1)
+	@uv run python -m domus_dweller.merge_pages --pattern "data/parsed/$(DATE)/olx_$(1)_*_page_*.json" --output data/parsed/$(DATE)/olx_$(1)_all.json
 	@echo "Finished OLX $(1) run for $(DATE)"
 endef
 
@@ -117,10 +115,10 @@ bigquery-bootstrap:
 
 daily-olx-bigquery-rent:
 	@test -n "$(BQ_PROJECT)" || (echo "Set BQ_PROJECT=<gcp-project-id>"; exit 1)
-	uv run python -m domus_dweller.sources.olx.ingest_bigquery --mode rent --project "$(BQ_PROJECT)" --dataset "$(BQ_DATASET)" --pages $(PAGES) --pause-ms $(ENRICH_PAUSE_MS) --cities $(CITIES) --property-types-rent $(PROPERTY_TYPES_RENT)
+	uv run python -m domus_dweller.sources.olx.ingest_bigquery --mode rent --project "$(BQ_PROJECT)" --dataset "$(BQ_DATASET)" --pages $(PAGES) --cities $(CITIES) --property-types-rent $(PROPERTY_TYPES_RENT)
 
 daily-olx-bigquery-sale:
 	@test -n "$(BQ_PROJECT)" || (echo "Set BQ_PROJECT=<gcp-project-id>"; exit 1)
-	uv run python -m domus_dweller.sources.olx.ingest_bigquery --mode sale --project "$(BQ_PROJECT)" --dataset "$(BQ_DATASET)" --pages $(PAGES) --pause-ms $(ENRICH_PAUSE_MS) --cities $(CITIES) --property-types-sale $(PROPERTY_TYPES_SALE)
+	uv run python -m domus_dweller.sources.olx.ingest_bigquery --mode sale --project "$(BQ_PROJECT)" --dataset "$(BQ_DATASET)" --pages $(PAGES) --cities $(CITIES) --property-types-sale $(PROPERTY_TYPES_SALE)
 
 daily-olx-bigquery: daily-olx-bigquery-rent daily-olx-bigquery-sale

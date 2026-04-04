@@ -4,7 +4,7 @@
 
 Run a reliable daily OLX pipeline that:
 
-1. parses listings (search + detail enrichment),
+1. parses listings from search pages,
 2. stores Bronze rows in append mode,
 3. keeps rent and sale separated.
 
