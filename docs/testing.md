@@ -58,17 +58,17 @@ These should usually be table-driven behavior tests around meaningful input and 
 
 Purpose:
 
-- verify schema bootstrap
-- verify upserts and insert-only history behavior
-- verify inactive listing handling
+- verify local file output shape
+- verify ingest-level duplicate suppression behavior
+- verify inactive listing handling in pipeline state
 
 Examples:
 
-- repeated observations create history rows, not overwrites
-- `listings` upsert on `(source_id, source_listing_id)` works
-- missing listings are marked inactive correctly
+- repeated unchanged observations do not create duplicate output records
+- changed observations are represented as new snapshots
+- missing listings are marked inactive correctly in pipeline metadata
 
-These tests should run against an isolated test database, not production Neon.
+These tests should run against isolated local test paths and fixtures.
 
 ### 4. Aggregation Functional Tests
 
@@ -96,6 +96,7 @@ Important edge cases:
 - missing rooms
 - missing area
 - price changes
+- unchanged relists with same price and same tracked fields
 - agency listings
 - private listings
 - removed listings
@@ -109,7 +110,17 @@ Before the first real ingest, add tests for:
 - Otodom detail parsing
 - seller classification normalization
 - canonical listing normalization
-- one end-to-end ingest flow using fixtures and a test database
+- one end-to-end ingest flow using fixtures and local output files
+
+## Current Parser Functional Coverage
+
+Current high-priority functional tests for Otodom and OLX:
+
+- parser contract exists and returns required fields
+- seller-segment normalization (`private`, `professional`, `unknown`)
+- ambiguous seller labels map to `unknown`
+- listings missing required id/url are skipped
+- duplicate cards are deduplicated by `(source, source_listing_id)`
 
 ## Commands
 

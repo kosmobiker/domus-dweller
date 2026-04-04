@@ -2,7 +2,7 @@
 
 ## Goal
 
-Build a reliable daily pipeline that fetches housing listings, normalizes them, and stores historical observations in Neon.
+Build a reliable daily pipeline that fetches housing listings, normalizes them, and stores historical observations locally.
 
 At the end of Phase 1, the system should work without any web UI.
 
@@ -48,14 +48,11 @@ Parser work should not start from live pages only. Freeze representative fixture
 
 ## Environment Variables
 
-Before implementing schema creation or ingestion commands, ask the user to configure Neon connection variables.
+Local Phase 1 does not require Neon environment variables.
 
-Current minimum contract:
+Optional later if you decide to sync to Neon:
 
 - `NEON_DATABASE_URL`
-
-Optional later:
-
 - `NEON_DATABASE_URL_READONLY`
 - `NEON_BRANCH`
 
@@ -104,7 +101,7 @@ When possible, keep the more specific subtype too:
 4. Normalize source fields into the canonical schema
 5. Classify seller as private or professional and preserve source evidence
 6. Assign H3 cells when coordinates exist
-7. Upsert listing identity and insert a new observation row
+7. Upsert listing identity and SCD history row only when listing state changes
 8. Mark previously seen but now missing listings as inactive
 9. Aggregate daily metrics after all source jobs finish
 
@@ -132,11 +129,11 @@ Keep each job independently rerunnable.
 
 Store:
 
-- normalized listing data
-- immutable observations
+- normalized listing data in local JSON/CSV outputs
 - compact raw payload fragments for debugging
 - ingest run metadata
 - seller classification evidence such as source labels, profile type, or agency name
+- local snapshot exports in JSON and CSV for auditability
 
 Do not store:
 

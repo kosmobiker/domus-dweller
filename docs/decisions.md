@@ -18,7 +18,10 @@ These decisions are already made.
 
 ## Technology Direction
 
-- Neon Postgres remains the system of record
+- Local JSON/CSV snapshots are the phase-1 storage path
+- JSON and CSV exports under `data/` are required for local auditing
+- DuckDB is optional for local analysis on top of JSON/CSV
+- Neon is optional as a later sync target
 - GitHub Actions remains the scheduler
 - Python is the preferred language for the data pipeline
 - Python 3.13 is the baseline runtime
@@ -27,3 +30,5 @@ These decisions are already made.
 - H3 remains the spatial indexing strategy
 - the web app is a later phase, not the first milestone
 - seller classification must distinguish at least `private` from `professional`
+- unchanged listing snapshots must not create duplicate history rows
+- listing history uses SCD Type 2 semantics for changed states

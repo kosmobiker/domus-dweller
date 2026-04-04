@@ -14,8 +14,8 @@ The goal is to collect flat and house listings over time, normalize them into a 
 
 ## Current Direction
 
-- Phase 1: Python scraping + Neon Postgres storage
-- Phase 2: Jupyter notebook analysis on top of Neon
+- Phase 1: Python scraping + local JSON/CSV snapshots
+- Phase 2: Jupyter notebook analysis on top of local warehouse data
 - Phase 3: lightweight web app, likely Next.js on Vercel
 
 ## Proposed Stack
@@ -24,7 +24,7 @@ The goal is to collect flat and house listings over time, normalize them into a 
 - Python version: 3.13
 - Environment and dependency manager: `uv`
 - Linting and formatting: `ruff`
-- Database: Neon Postgres
+- Local exports: JSON and CSV under `data/`
 - Jobs: GitHub Actions scheduled workflows
 - Notebook analysis: Jupyter + SQL/Pandas
 - Geospatial indexing: H3 via Python `h3`
@@ -74,10 +74,7 @@ uv run pytest
 
 ## Environment
 
-Before any database work or ingestion runs, you need to provide Neon connection variables.
+Phase 1 can run fully local without Neon variables.
 
-Start with:
-
-- `NEON_DATABASE_URL`
-
-See [.env.example](/home/user/domus-dweller/.env.example) for the current contract.
+DuckDB is optional as a local analysis engine over JSON/CSV files.
+Neon is optional for a later sync step.

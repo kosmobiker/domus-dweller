@@ -17,7 +17,8 @@ Build a personal housing analytics platform for Krakow and nearby suburbs with:
 ### Phase 1: Ingestion And Storage
 
 - Language: Python
-- Database: Neon Postgres free tier
+- Phase-1 storage: local JSON and CSV snapshots under `data/`
+- Optional local analysis engine: DuckDB over those files
 - Scheduled jobs: GitHub Actions cron
 - Scraping libs: `httpx` or `requests`, `selectolax` or `beautifulsoup4`
 - Data access: SQL-first, `psycopg`, optional SQLAlchemy Core
@@ -74,33 +75,27 @@ Responsibilities:
 
 ### 3. Persistence Layer
 
-Use Postgres as the system of record.
+Use local JSON/CSV outputs as the phase-1 system of record.
 
 Suggested tables:
 
-- `sources`
 - `ingest_runs`
-- `raw_listing_snapshots`
-- `listings`
-- `listing_observations`
-- `listing_current`
+- `listing_identity` metadata
+- `listing_versions` snapshots (change-aware)
 - `h3_daily_metrics`
-- `municipality_reference`
-- `district_reference`
 
 Suggested behavior:
 
-- `raw_listing_snapshots`: immutable source payloads or compact extracted source JSON
-- `listings`: canonical identity per source listing
-- `listing_observations`: one row per observation time, preserving price history
-- `listing_current`: current denormalized state for fast reads
+- `listing_identity`: one logical record per source listing id with first/last seen and active flag
+- `listing_versions`: append only when tracked state changes; no duplicate rows for unchanged relists
+- `listing_current`: derived view for analytics
 - `h3_daily_metrics`: pre-aggregated daily metrics for the map
 
 ## Historical Price Model
 
-Do not store only the latest value.
+Do not store only the latest value, and do not store duplicate unchanged states.
 
-For each observed listing state, keep:
+For each changed listing state, keep:
 
 - `listing_id`
 - `observed_at`
@@ -115,7 +110,7 @@ For each observed listing state, keep:
 
 This gives you:
 
-- price history by listing
+- price history by listing without duplicate snapshots
 - days-on-market estimates
 - price drop detection
 - supply changes over time

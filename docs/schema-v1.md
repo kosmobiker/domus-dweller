@@ -1,117 +1,45 @@
 # Schema V1
 
-## Core Tables
+## Core Tables (Local Phase 1)
 
-### `sources`
+### `listing_identity`
 
-- `id`
-- `code`
-- `name`
-- `is_active`
-
-### `ingest_runs`
-
-- `id`
-- `source_id`
-- `job_name`
-- `started_at`
-- `finished_at`
-- `status`
-- `records_seen`
-- `records_inserted`
-- `records_updated`
-- `records_failed`
-- `error_summary`
-
-### `listings`
-
-- `id`
-- `source_id`
+- `source`
 - `source_listing_id`
-- `source_url`
-- `listing_type`
-- `property_type`
-- `seller_segment`
-- `seller_type`
-- `seller_name`
-- `seller_profile_url`
-- `title`
 - `first_seen_at`
 - `last_seen_at`
-
-### `listing_observations`
-
-- `id`
-- `listing_id`
-- `observed_at`
 - `is_active`
-- `status`
+- `inactive_at`
+
+### `listing_versions` (SCD Type 2)
+
+- `source`
+- `source_listing_id`
+- `valid_from`
+- `valid_to`
+- `is_current`
+- `change_hash`
+- `source_url`
+- `title`
 - `seller_segment`
-- `seller_type`
-- `seller_name`
 - `price_total`
 - `currency`
-- `price_per_sqm`
-- `area_sqm`
-- `rooms`
-- `floor`
-- `address_text`
-- `district`
-- `municipality`
-- `lat`
-- `lng`
-- `h3_cell_res8`
-- `h3_cell_res9`
-- `description`
-- `raw_payload`
-- `seller_evidence`
-
-### `listing_current`
-
-- `listing_id`
-- `observed_at`
-- `is_active`
-- `seller_segment`
-- `seller_type`
-- `price_total`
-- `price_per_sqm`
-- `area_sqm`
-- `rooms`
-- `district`
-- `municipality`
-- `lat`
-- `lng`
-- `h3_cell_res8`
-- `h3_cell_res9`
-
-### `h3_daily_metrics`
-
-- `metric_date`
-- `resolution`
-- `cell_id`
-- `listing_type`
-- `property_type`
-- `listing_count`
-- `new_listings`
-- `removed_listings`
-- `median_price_total`
-- `median_price_per_sqm`
-- `p25_price_per_sqm`
-- `p75_price_per_sqm`
+- `normalized_json`
 
 ## Constraints
 
-- unique on `listings(source_id, source_listing_id)`
-- index on `listing_observations(listing_id, observed_at desc)`
-- index on `listing_observations(h3_cell_res8, observed_at desc)`
-- index on `listing_observations(h3_cell_res9, observed_at desc)`
-- index on `h3_daily_metrics(metric_date, resolution, cell_id, listing_type, property_type)`
+- primary key on `listing_identity(source, source_listing_id)`
+- only one current row per listing id should exist in `listing_versions`
+- append a new `listing_versions` row only when `change_hash` changes
+- update `listing_identity.last_seen_at` on every successful observation
+- mark `listing_identity.is_active = false` when listing disappears from a full snapshot
 
 ## Modeling Notes
 
-- `listing_observations` is the historical source of truth
-- `listing_current` is a convenience table or materialized view
-- `raw_payload` should be compact JSON, not a full raw page dump
+- `listing_versions` is the historical source of truth
+- unchanged listings should not create new SCD rows
+- `listing_current` is derived by filtering `is_current = true`
+- store compact normalized payload JSON, not full page dumps
 - keep `listing_type` as `rent` or `sale`
 - keep `property_type` as `flat` or `house` in v1
 - `seller_segment` should be `private`, `professional`, or `unknown`
