@@ -1,1 +1,0 @@
-"""Otodom source adapter."""

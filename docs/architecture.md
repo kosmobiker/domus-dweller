@@ -33,7 +33,7 @@ Build a personal housing analytics platform for Krakow and nearby suburbs with:
 
 ## System Shape
 
-There should be four layers.
+There should be five layers.
 
 ### 1. Source Adapters
 
@@ -60,9 +60,22 @@ Each source adapter is isolated and returns a common intermediate object:
 
 This layer should know source-specific selectors and source-specific quirks.
 
-### 2. Normalization Layer
+### 2. Bronze Layer (Append-Only Facts)
 
-This layer converts adapter output into canonical records and validates them.
+This layer persists parsed facts exactly as observed.
+
+Responsibilities:
+
+- persist every parsed row from source adapters
+- include ingest metadata (`ingest_run_id`, `observed_at`, source keys)
+- store raw payload fragments and normalized payload side by side
+- avoid deduplication or SCD logic
+
+Bronze is optimized for replayability and auditability, not for query convenience.
+
+### 3. Silver Layer (Clean + Dedup + SCD)
+
+This layer converts Bronze facts into curated listing history.
 
 Responsibilities:
 
@@ -71,29 +84,28 @@ Responsibilities:
 - classify Krakow vs suburb
 - normalize room and area values
 - reject obviously broken records
-- compute a listing fingerprint
+- deduplicate repeated observations
+- compute stable `change_hash`
+- maintain SCD Type 2 history (`valid_from`, `valid_to`, `is_current`)
+- maintain listing identity state (`first_seen`, `last_seen`, `is_active`)
 
-### 3. Persistence Layer
+### 4. Gold Layer (Read-Optimized Analytics)
 
-Use local JSON/CSV outputs as the phase-1 system of record.
+This layer stores aggregated and query-ready outputs for notebooks and UI.
 
-Suggested tables:
+Responsibilities:
 
-- `ingest_runs`
-- `listing_identity` metadata
-- `listing_versions` snapshots (change-aware)
-- `h3_daily_metrics`
+- daily H3 metrics and rollups
+- area-level trends and comparison metrics
+- notebook/app-facing read models with stable contracts
 
-Suggested behavior:
+### 5. Serving Layer
 
-- `listing_identity`: one logical record per source listing id with first/last seen and active flag
-- `listing_versions`: append only when tracked state changes; no duplicate rows for unchanged relists
-- `listing_current`: derived view for analytics
-- `h3_daily_metrics`: pre-aggregated daily metrics for the map
+This layer exposes Gold outputs to notebooks and the web app.
 
 ## Historical Price Model
 
-Do not store only the latest value, and do not store duplicate unchanged states.
+Bronze stores every observation; Silver stores only changed states.
 
 For each changed listing state, keep:
 
@@ -108,7 +120,7 @@ For each changed listing state, keep:
 - `h3_cell_res8`
 - `h3_cell_res9`
 
-This gives you:
+Silver gives you:
 
 - price history by listing without duplicate snapshots
 - days-on-market estimates
@@ -161,9 +173,9 @@ GitHub Actions should run on a UTC schedule.
 
 Recommended flow:
 
-1. `scrape-source` matrix job per source
-2. `normalize-and-upsert`
-3. `aggregate-daily-metrics`
+1. `scrape-source-to-bronze` matrix job per source
+2. `build-silver-history`
+3. `aggregate-gold-metrics`
 4. `smoke-check`
 
 Recommended rules:
@@ -172,6 +184,8 @@ Recommended rules:
 - failures in one source should not block other sources
 - every run writes a row into `ingest_runs`
 - failed parsers should keep enough raw context to debug
+- Bronze remains append-only
+- Silver and Gold should be rebuildable from Bronze
 
 ## Analysis Shape Before The Website
 
@@ -253,10 +267,6 @@ The smallest serious version is:
 - one or two sources first
 - daily updates
 - notebook-first analytics
-- listing and area history
-
-Commercial real estate stays out of scope for v1.
-- H3 price map later
 - listing and area history
 
 Commercial real estate stays out of scope for v1.

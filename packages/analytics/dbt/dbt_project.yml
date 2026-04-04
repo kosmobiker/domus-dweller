@@ -1,0 +1,26 @@
+name: "domus_dweller"
+version: "1.0.0"
+config-version: 2
+
+profile: "domus_dweller_bigquery"
+
+model-paths: ["models"]
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  domus_dweller:
+    +materialized: view
+    staging:
+      +schema: "{{ var('silver_dataset', 'silver') }}"
+      +tags: ["staging"]
+    silver:
+      +schema: "{{ var('silver_dataset', 'silver') }}"
+      +materialized: table
+      +tags: ["silver"]
+    gold:
+      +schema: "{{ var('gold_dataset', 'gold') }}"
+      +materialized: table
+      +tags: ["gold"]

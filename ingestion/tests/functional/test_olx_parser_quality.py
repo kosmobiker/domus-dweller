@@ -1,32 +1,4 @@
-from domus_dweller.sources.olx.parser import parse_search_results as parse_olx_search_results
-from domus_dweller.sources.otodom.parser import parse_search_results as parse_otodom_search_results
-
-
-def test_given_otodom_seller_labels_when_parsing_then_segments_are_normalized() -> None:
-    # Given
-    raw_html = """
-    <main>
-      <article data-cy="listing-item" data-id="otodom-1">
-        <a href="https://www.otodom.pl/pl/oferta/1">Oferta 1</a>
-        <span>Biuro nieruchomosci</span>
-      </article>
-      <article data-cy="listing-item" data-id="otodom-2">
-        <a href="https://www.otodom.pl/pl/oferta/2">Oferta 2</a>
-        <span>Wlasciciel prywatny</span>
-      </article>
-      <article data-cy="listing-item" data-id="otodom-3">
-        <a href="https://www.otodom.pl/pl/oferta/3">Oferta 3</a>
-        <span>Sprzedawca</span>
-      </article>
-    </main>
-    """
-
-    # When
-    listings = parse_otodom_search_results(raw_html)
-
-    # Then
-    segments = [listing["seller_segment"] for listing in listings]
-    assert segments == ["professional", "private", "unknown"]
+from domus_dweller.sources.olx.parser import parse_search_results
 
 
 def test_given_olx_seller_labels_when_parsing_then_segments_are_normalized() -> None:
@@ -49,36 +21,11 @@ def test_given_olx_seller_labels_when_parsing_then_segments_are_normalized() -> 
     """
 
     # When
-    listings = parse_olx_search_results(raw_html)
+    listings = parse_search_results(raw_html)
 
     # Then
     segments = [listing["seller_segment"] for listing in listings]
     assert segments == ["professional", "private", "unknown"]
-
-
-def test_given_cards_missing_required_identifiers_when_parsing_then_cards_are_skipped() -> None:
-    # Given
-    raw_html = """
-    <main>
-      <article data-cy="listing-item" data-id="otodom-1">
-        <a href="https://www.otodom.pl/pl/oferta/1">Oferta 1</a>
-        <span>Biuro nieruchomosci</span>
-      </article>
-      <article data-cy="listing-item" data-id="">
-        <a href="https://www.otodom.pl/pl/oferta/2">Oferta 2</a>
-      </article>
-      <article data-cy="listing-item" data-id="otodom-3">
-        <a>Oferta 3</a>
-      </article>
-    </main>
-    """
-
-    # When
-    listings = parse_otodom_search_results(raw_html)
-
-    # Then
-    assert len(listings) == 1
-    assert listings[0]["source_listing_id"] == "otodom-1"
 
 
 def test_given_duplicate_cards_when_parsing_then_results_are_deduplicated() -> None:
@@ -101,7 +48,7 @@ def test_given_duplicate_cards_when_parsing_then_results_are_deduplicated() -> N
     """
 
     # When
-    listings = parse_olx_search_results(raw_html)
+    listings = parse_search_results(raw_html)
 
     # Then
     assert [listing["source_listing_id"] for listing in listings] == ["olx-1", "olx-2"]
@@ -148,7 +95,7 @@ def test_given_olx_jsonld_offers_when_parsing_then_listings_are_extracted() -> N
     """
 
     # When
-    listings = parse_olx_search_results(raw_html)
+    listings = parse_search_results(raw_html)
 
     # Then
     assert [listing["source_listing_id"] for listing in listings] == ["olx-19ShY0", "olx-19SDJ0"]
@@ -168,27 +115,6 @@ def test_given_olx_jsonld_offers_when_parsing_then_listings_are_extracted() -> N
     assert listings[0]["location_approx"] == "Kraków, Stare Miasto"
     assert listings[0]["images"] == ["https://cdn.example/1.jpg", "https://cdn.example/2.jpg"]
     assert listings[0]["price_valid_until"] == "2026-04-19T17:28:39+02:00"
-
-
-def test_given_price_and_title_text_when_parsing_then_fields_are_human_readable() -> None:
-    # Given
-    raw_html = """
-    <main>
-      <article data-cy="listing-item" data-id="otodom-123">
-        <a href="https://www.otodom.pl/pl/oferta/123">Mieszkanie 52 m2, Krakow</a>
-        <span>799 000 zł</span>
-        <span>Biuro nieruchomosci</span>
-      </article>
-    </main>
-    """
-
-    # When
-    listings = parse_otodom_search_results(raw_html)
-
-    # Then
-    assert listings[0]["title"] == "Mieszkanie 52 m2, Krakow"
-    assert listings[0]["price_total"] == 799000.0
-    assert listings[0]["currency"] == "PLN"
 
 
 def test_given_olx_cards_and_jsonld_when_parsing_then_rows_are_enriched_by_id() -> None:
@@ -233,7 +159,7 @@ def test_given_olx_cards_and_jsonld_when_parsing_then_rows_are_enriched_by_id() 
     """
 
     # When
-    listings = parse_olx_search_results(raw_html)
+    listings = parse_search_results(raw_html)
 
     # Then
     assert len(listings) == 1

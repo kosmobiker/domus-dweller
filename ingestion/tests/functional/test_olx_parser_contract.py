@@ -17,14 +17,14 @@ def _load_search_results_parser(source: str) -> Callable[[str], list[dict]]:
         module = import_module(module_name)
     except ModuleNotFoundError as exc:
         pytest.fail(
-            "Given source fixtures for Otodom and OLX, when importing parser modules, "
+            "Given source fixtures for OLX, when importing parser modules, "
             f"then `{module_name}` must exist. Missing module: {exc.name}"
         )
 
     parser = getattr(module, function_name, None)
     if parser is None:
         pytest.fail(
-            "Given source fixtures for Otodom and OLX, when loading parser entrypoints, "
+            "Given source fixtures for OLX, when loading parser entrypoints, "
             f"then `{module_name}.{function_name}` must exist."
         )
 
@@ -34,7 +34,6 @@ def _load_search_results_parser(source: str) -> Callable[[str], list[dict]]:
 @pytest.mark.parametrize(
     ("source", "fixture_name"),
     [
-        ("otodom", "search_results.html"),
         ("olx", "search_results.html"),
     ],
 )
