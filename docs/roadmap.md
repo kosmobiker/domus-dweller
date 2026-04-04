@@ -2,7 +2,7 @@
 
 ## Phase 1: OLX Bronze Stability (Now)
 
-- finalize OLX parsing + detail enrichment quality
+- finalize OLX parsing quality and daily stability
 - run daily GitHub Actions parse/sink jobs
 - monitor null rates and parser drift
 - keep Bronze append-only in BigQuery

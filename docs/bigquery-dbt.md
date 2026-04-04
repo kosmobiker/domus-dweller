@@ -8,7 +8,7 @@
 
 ## Daily Flow
 
-1. Parse/enrich OLX (`make daily-olx-parse`) to produce `olx_rent_all.json` and `olx_sale_all.json`.
+1. Parse OLX (`make daily-olx-parse`) to produce `olx_rent_all.json` and `olx_sale_all.json`.
 2. Load rows into BigQuery Bronze tables:
    - `bronze.rent_bronze`
    - `bronze.sale_bronze`

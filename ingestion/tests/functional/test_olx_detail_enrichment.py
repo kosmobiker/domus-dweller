@@ -375,3 +375,39 @@ def test_given_detail_403_in_cli_when_running_then_job_does_not_fail_and_output_
     assert enriched[0]["source_listing_id"] == "olx-403"
     assert enriched[1]["source_listing_id"] == "olx-ok"
     assert enriched[1]["area_sqm"] == 41.0
+
+
+def test_given_consecutive_403_wall_when_enriching_then_fail_fast_keeps_tail_rows_unchanged(
+    monkeypatch,
+) -> None:
+    # Given
+    listings = [
+        {"source_listing_id": "id1", "source_url": "https://www.olx.pl/d/oferta/1.html"},
+        {"source_listing_id": "id2", "source_url": "https://www.olx.pl/d/oferta/2.html"},
+        {"source_listing_id": "id3", "source_url": "https://www.olx.pl/d/oferta/3.html"},
+        {"source_listing_id": "id4", "source_url": "https://www.olx.pl/d/oferta/4.html"},
+    ]
+    calls: list[str] = []
+
+    def _fake_fetch_html(url: str, *_args, **_kwargs) -> str:
+        calls.append(url)
+        request = httpx.Request("GET", url)
+        response = httpx.Response(status_code=403, request=request)
+        raise httpx.HTTPStatusError("forbidden", request=request, response=response)
+
+    monkeypatch.setattr(enrich, "_fetch_html", _fake_fetch_html)
+
+    # When
+    enriched = enrich.enrich_listings(
+        listings,
+        save_html_dir=None,
+        pause_ms=0,
+        timeout_sec=5.0,
+        default_mode="rent",
+        max_consecutive_403=2,
+    )
+
+    # Then
+    assert len(calls) == 2
+    assert len(enriched) == 4
+    assert [row["source_listing_id"] for row in enriched] == ["id1", "id2", "id3", "id4"]

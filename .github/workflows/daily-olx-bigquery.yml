@@ -57,7 +57,7 @@ jobs:
           echo "Run date: $RUN_DATE"
           echo "Pages: $PAGES"
 
-      - name: Parse + enrich OLX
+      - name: Parse OLX
         run: make daily-olx-parse DATE=${{ steps.prep.outputs.run_date }} PAGES=${{ steps.prep.outputs.pages }}
 
       - name: Upload parsed artifacts
