@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
+import sys
 from datetime import UTC, date, datetime
+from types import ModuleType
 
 import pytest
-from domus_dweller.sinks.bigquery import load_rows_to_bigquery
+from domus_dweller.sinks.bigquery import _build_client, load_rows_to_bigquery
 
 
 class _FakeBigQueryClient:
@@ -32,6 +35,27 @@ class _FakeBigQueryClient:
         self.rows = json_rows
         self.job_config = job_config
         return _FakeBigQueryClient._FakeLoadJob(self.errors, len(json_rows))
+
+
+class _FakeBigQueryClientWithoutOutputRows(_FakeBigQueryClient):
+    class _FakeLoadJob:
+        def __init__(self, errors: list[dict]) -> None:
+            self.errors = errors
+
+        def result(self) -> None:
+            return None
+
+    def load_table_from_json(
+        self,
+        json_rows: list[dict],
+        destination: str,
+        *,
+        job_config=None,
+    ):
+        self.table_id = destination
+        self.rows = json_rows
+        self.job_config = job_config
+        return _FakeBigQueryClientWithoutOutputRows._FakeLoadJob(self.errors)
 
 
 def test_given_rows_when_loading_then_rows_are_appended_to_mode_table() -> None:
@@ -82,6 +106,158 @@ def test_given_missing_required_fields_when_loading_then_error_is_raised() -> No
             dataset="bronze",
             client=client,
         )
+
+
+def test_given_invalid_mode_or_identifiers_when_loading_then_validation_errors_are_raised() -> None:
+    # Given
+    rows = [
+        {
+            "source": "olx",
+            "source_listing_id": "olx-1",
+            "source_url": "https://www.olx.pl/d/oferta/example-CID3-ID1.html",
+        }
+    ]
+
+    # When / Then
+    with pytest.raises(ValueError, match="`mode` must be `rent` or `sale`"):
+        load_rows_to_bigquery(
+            rows,
+            mode="both",
+            project="dw",
+            dataset="bronze",
+            client=_FakeBigQueryClient(),
+        )
+    with pytest.raises(ValueError, match="BigQuery project is required"):
+        load_rows_to_bigquery(
+            rows,
+            mode="rent",
+            project="  ",
+            dataset="bronze",
+            client=_FakeBigQueryClient(),
+        )
+    with pytest.raises(ValueError, match="BigQuery dataset is required"):
+        load_rows_to_bigquery(
+            rows,
+            mode="rent",
+            project="dw",
+            dataset=" ",
+            client=_FakeBigQueryClient(),
+        )
+
+
+def test_given_load_job_without_output_rows_when_loading_then_input_count_is_returned() -> None:
+    # Given
+    client = _FakeBigQueryClientWithoutOutputRows()
+    rows = [
+        {
+            "source": "olx",
+            "source_listing_id": "olx-1",
+            "source_url": "https://www.olx.pl/d/oferta/example-CID3-ID1.html",
+        }
+    ]
+
+    # When
+    inserted = load_rows_to_bigquery(
+        rows,
+        mode="rent",
+        project="dw-project",
+        dataset="bronze",
+        client=client,
+    )
+
+    # Then
+    assert inserted == 1
+
+
+def test_given_service_account_env_when_building_client_then_credentials_path_is_used(
+    monkeypatch,
+) -> None:
+    # Given
+    calls: dict[str, object] = {}
+
+    class _FakeCredentials:
+        @staticmethod
+        def from_service_account_info(info):
+            calls["info"] = info
+            return "creds"
+
+    class _FakeBQClient:
+        def __init__(self, *, project: str, credentials=None) -> None:
+            calls["project"] = project
+            calls["credentials"] = credentials
+
+    fake_bigquery = ModuleType("google.cloud.bigquery")
+    fake_bigquery.Client = _FakeBQClient
+    fake_cloud = ModuleType("google.cloud")
+    fake_cloud.bigquery = fake_bigquery
+    fake_google = ModuleType("google")
+    fake_google.cloud = fake_cloud
+
+    fake_service_account = ModuleType("google.oauth2.service_account")
+    fake_service_account.Credentials = _FakeCredentials
+    fake_oauth2 = ModuleType("google.oauth2")
+    fake_oauth2.service_account = fake_service_account
+
+    monkeypatch.setitem(sys.modules, "google", fake_google)
+    monkeypatch.setitem(sys.modules, "google.cloud", fake_cloud)
+    monkeypatch.setitem(sys.modules, "google.cloud.bigquery", fake_bigquery)
+    monkeypatch.setitem(sys.modules, "google.oauth2", fake_oauth2)
+    monkeypatch.setitem(sys.modules, "google.oauth2.service_account", fake_service_account)
+    monkeypatch.setenv(
+        "BIGQUERY_SERVICE_ACCOUNT_JSON",
+        json.dumps({"type": "service_account", "project_id": "dw-project"}),
+    )
+
+    # When
+    _build_client("dw-project")
+
+    # Then
+    assert calls["project"] == "dw-project"
+    assert calls["credentials"] == "creds"
+    assert calls["info"] == {"type": "service_account", "project_id": "dw-project"}
+
+
+def test_given_no_service_account_env_when_building_client_then_adc_path_is_used(
+    monkeypatch,
+) -> None:
+    # Given
+    calls: dict[str, object] = {}
+
+    class _FakeCredentials:
+        @staticmethod
+        def from_service_account_info(info):
+            raise AssertionError("service account credentials should not be used")
+
+    class _FakeBQClient:
+        def __init__(self, *, project: str, credentials=None) -> None:
+            calls["project"] = project
+            calls["credentials"] = credentials
+
+    fake_bigquery = ModuleType("google.cloud.bigquery")
+    fake_bigquery.Client = _FakeBQClient
+    fake_cloud = ModuleType("google.cloud")
+    fake_cloud.bigquery = fake_bigquery
+    fake_google = ModuleType("google")
+    fake_google.cloud = fake_cloud
+
+    fake_service_account = ModuleType("google.oauth2.service_account")
+    fake_service_account.Credentials = _FakeCredentials
+    fake_oauth2 = ModuleType("google.oauth2")
+    fake_oauth2.service_account = fake_service_account
+
+    monkeypatch.setitem(sys.modules, "google", fake_google)
+    monkeypatch.setitem(sys.modules, "google.cloud", fake_cloud)
+    monkeypatch.setitem(sys.modules, "google.cloud.bigquery", fake_bigquery)
+    monkeypatch.setitem(sys.modules, "google.oauth2", fake_oauth2)
+    monkeypatch.setitem(sys.modules, "google.oauth2.service_account", fake_service_account)
+    monkeypatch.delenv("BIGQUERY_SERVICE_ACCOUNT_JSON", raising=False)
+
+    # When
+    _build_client("dw-project")
+
+    # Then
+    assert calls["project"] == "dw-project"
+    assert calls["credentials"] is None
 
 
 def test_given_bigquery_insert_errors_when_loading_then_error_is_raised() -> None:
