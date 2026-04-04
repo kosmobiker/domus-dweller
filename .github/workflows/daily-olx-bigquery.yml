@@ -1,0 +1,104 @@
+name: Daily OLX -> BigQuery
+
+on:
+  schedule:
+    - cron: "20 3 * * *"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Snapshot date (YYYY-MM-DD). Empty = today UTC."
+        required: false
+        type: string
+      pages:
+        description: "Pages per seed"
+        required: false
+        default: "30"
+        type: string
+
+env:
+  BQ_DATASET: bronze
+  BQ_LOCATION: EU
+
+jobs:
+  parse:
+    runs-on: ubuntu-latest
+    outputs:
+      run_date: ${{ steps.prep.outputs.run_date }}
+      pages: ${{ steps.prep.outputs.pages }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Resolve run params
+        id: prep
+        shell: bash
+        run: |
+          RUN_DATE="${{ github.event.inputs.date }}"
+          PAGES="${{ github.event.inputs.pages }}"
+          if [ -z "$RUN_DATE" ]; then
+            RUN_DATE="$(date -u +%F)"
+          fi
+          if [ -z "$PAGES" ]; then
+            PAGES="30"
+          fi
+          echo "run_date=$RUN_DATE" >> "$GITHUB_OUTPUT"
+          echo "pages=$PAGES" >> "$GITHUB_OUTPUT"
+          echo "Run date: $RUN_DATE"
+          echo "Pages: $PAGES"
+
+      - name: Parse + enrich OLX
+        run: make daily-olx-parse DATE=${{ steps.prep.outputs.run_date }} PAGES=${{ steps.prep.outputs.pages }}
+
+      - name: Upload parsed artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: olx-parsed-${{ steps.prep.outputs.run_date }}
+          path: data/parsed/${{ steps.prep.outputs.run_date }}
+          if-no-files-found: error
+          retention-days: 7
+
+  sink:
+    runs-on: ubuntu-latest
+    needs: parse
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Download parsed artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: olx-parsed-${{ needs.parse.outputs.run_date }}
+          path: data/parsed/${{ needs.parse.outputs.run_date }}
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
+
+      - name: Bootstrap Bronze tables
+        run: make bigquery-bootstrap BQ_PROJECT=${{ secrets.GCP_PROJECT_ID }} BQ_DATASET=${{ env.BQ_DATASET }} BQ_LOCATION=${{ env.BQ_LOCATION }}
+
+      - name: Sink to BigQuery (with retries)
+        run: make daily-olx-sink-bigquery DATE=${{ needs.parse.outputs.run_date }} BQ_PROJECT=${{ secrets.GCP_PROJECT_ID }} BQ_DATASET=${{ env.BQ_DATASET }}

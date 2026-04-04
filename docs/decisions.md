@@ -1,29 +1,32 @@
 # Decisions
 
-These decisions are already made.
+## Scope
 
-## Product Scope
+- v1 geography: Krakow + ~30 km.
+- v1 property scope: residential only.
+- commercial real estate: excluded.
+- cadence: daily ingestion.
 
-- v1 includes flats and houses
-- commercial real estate is excluded
-- geography is Krakow plus roughly a 30 km radius
-- Facebook Marketplace is out of scope for v1
-- daily ingestion is enough for v1
+## Source Strategy
 
-## Delivery Sequence
+- current source: OLX only.
+- rent and sale are separate ingestion tracks.
+- additional sources return later after OLX stability.
 
-1. Scrape and store data
-2. Analyze data in Jupyter notebooks
-3. Build the web application
+## Data Layer Policy
 
-## Technology Direction
+- Bronze: append-only facts, no dedup, no SCD.
+- Silver: cleaning, deduplication, SCD (`is_current`, validity windows).
+- Gold: aggregated analytics-ready outputs.
 
-- Neon Postgres remains the system of record
-- GitHub Actions remains the scheduler
-- Python is the preferred language for the data pipeline
-- Python 3.13 is the baseline runtime
-- `uv` is the preferred dependency manager
-- `ruff` is the default lint and format tool
-- H3 remains the spatial indexing strategy
-- the web app is a later phase, not the first milestone
-- seller classification must distinguish at least `private` from `professional`
+## Platform Direction
+
+- scheduler: GitHub Actions.
+- Bronze warehouse: BigQuery.
+- parser/sink code: Python (`uv`, `ruff`, `pytest`).
+- Alembic: removed for BigQuery Sandbox compatibility.
+
+## Cost Constraint
+
+- keep zero recurring spend by default.
+- avoid paid services unless explicitly approved.

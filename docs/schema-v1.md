@@ -1,117 +1,82 @@
 # Schema V1
 
-## Core Tables
+## Core Tables (Local Phase 1)
 
-### `sources`
+### Bronze Layer
 
-- `id`
-- `code`
-- `name`
-- `is_active`
+#### `bronze_listing_observations` (append only)
 
-### `ingest_runs`
-
-- `id`
-- `source_id`
-- `job_name`
-- `started_at`
-- `finished_at`
-- `status`
-- `records_seen`
-- `records_inserted`
-- `records_updated`
-- `records_failed`
-- `error_summary`
-
-### `listings`
-
-- `id`
-- `source_id`
+- `ingest_run_id`
+- `observed_at`
+- `source`
 - `source_listing_id`
 - `source_url`
-- `listing_type`
-- `property_type`
-- `seller_segment`
-- `seller_type`
-- `seller_name`
-- `seller_profile_url`
-- `title`
-- `first_seen_at`
-- `last_seen_at`
-
-### `listing_observations`
-
-- `id`
-- `listing_id`
-- `observed_at`
-- `is_active`
-- `status`
-- `seller_segment`
-- `seller_type`
-- `seller_name`
-- `price_total`
-- `currency`
-- `price_per_sqm`
-- `area_sqm`
-- `rooms`
-- `floor`
-- `address_text`
-- `district`
-- `municipality`
-- `lat`
-- `lng`
-- `h3_cell_res8`
-- `h3_cell_res9`
-- `description`
 - `raw_payload`
+- `normalized_json`
+- `payload_hash`
 - `seller_evidence`
 
-### `listing_current`
+Bronze rules:
 
-- `listing_id`
-- `observed_at`
+- insert only, no updates or deletes in normal flow
+- do not deduplicate in ingestion code
+- every parsed row is a fact row for auditability
+- keep source-mode tracks explicit (`mode = rent|sale`) in Bronze rows
+- keep both:
+  - `detail_params` as the full raw parameter map
+  - `detail_params_common` plus mode-specific maps (`detail_params_rent` / `detail_params_sale`)
+
+### Silver Layer
+
+#### `silver_listing_identity`
+
+- `source`
+- `source_listing_id`
+- `first_seen_at`
+- `last_seen_at`
 - `is_active`
-- `seller_segment`
-- `seller_type`
-- `price_total`
-- `price_per_sqm`
-- `area_sqm`
-- `rooms`
-- `district`
-- `municipality`
-- `lat`
-- `lng`
-- `h3_cell_res8`
-- `h3_cell_res9`
+- `inactive_at`
 
-### `h3_daily_metrics`
+#### `silver_listing_versions` (SCD Type 2)
 
-- `metric_date`
-- `resolution`
-- `cell_id`
-- `listing_type`
-- `property_type`
-- `listing_count`
-- `new_listings`
-- `removed_listings`
-- `median_price_total`
-- `median_price_per_sqm`
-- `p25_price_per_sqm`
-- `p75_price_per_sqm`
+- `source`
+- `source_listing_id`
+- `valid_from`
+- `valid_to`
+- `is_current`
+- `change_hash`
+- `normalized_json`
 
-## Constraints
+#### `silver_listing_current` (view/table)
 
-- unique on `listings(source_id, source_listing_id)`
-- index on `listing_observations(listing_id, observed_at desc)`
-- index on `listing_observations(h3_cell_res8, observed_at desc)`
-- index on `listing_observations(h3_cell_res9, observed_at desc)`
-- index on `h3_daily_metrics(metric_date, resolution, cell_id, listing_type, property_type)`
+- one current row per `(source, source_listing_id)`
+- derived from `silver_listing_versions is_current = true`
+
+Silver rules:
+
+- primary key on `silver_listing_identity(source, source_listing_id)`
+- only one current row per listing id should exist in `silver_listing_versions`
+- append a new `silver_listing_versions` row only when `change_hash` changes
+- unchanged Bronze observations must not create new Silver SCD rows
+- update `silver_listing_identity.last_seen_at` on every successful full snapshot
+- mark `silver_listing_identity.is_active = false` when listing disappears from a full snapshot
+
+### Gold Layer
+
+#### `gold_h3_daily_metrics`
+
+- date
+- H3 resolution and cell id
+- listing counts
+- median/p25/p75 price metrics
+- split dimensions (`rent/sale`, `flat/house`, `seller_segment`)
 
 ## Modeling Notes
 
-- `listing_observations` is the historical source of truth
-- `listing_current` is a convenience table or materialized view
-- `raw_payload` should be compact JSON, not a full raw page dump
+- Bronze is the raw historical source of truth
+- Silver is the curated listing-history source of truth
+- Gold is read-optimized and should be rebuildable from Silver
+- store compact normalized payload JSON, not full page dumps
 - keep `listing_type` as `rent` or `sale`
 - keep `property_type` as `flat` or `house` in v1
 - `seller_segment` should be `private`, `professional`, or `unknown`

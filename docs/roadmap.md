@@ -1,60 +1,34 @@
 # Roadmap
 
-## Phase 0: Foundation
+## Phase 1: OLX Bronze Stability (Now)
 
-- confirm scope and source priorities
-- choose the primary implementation language for data work
-- define the canonical schema
-- create local development workflow
+- finalize OLX parsing + detail enrichment quality
+- run daily GitHub Actions parse/sink jobs
+- monitor null rates and parser drift
+- keep Bronze append-only in BigQuery
 
-## Phase 1: Ingestion MVP
+Success: 3-7 consecutive successful daily runs with expected row growth.
 
-- build one source adapter
-- persist raw snapshots
-- normalize into canonical listings
-- store listing observations
-- run the pipeline manually
+## Phase 2: Silver Foundations
 
-Success means one source can be ingested repeatably and inspected in Neon.
+- define Silver contracts (identity + versions + current)
+- implement dedup and SCD from Bronze
+- add data-quality tests for versioning behavior
 
-## Phase 2: Scheduled Pipeline
+Success: stable `is_current` and version history for OLX listings.
 
-- add GitHub Actions cron
-- add source run logging
-- add failure alerts through workflow output
-- add daily aggregation jobs
+## Phase 3: Gold + Notebook Analytics
 
-Success means data refreshes automatically every day.
+- add rent/sale aggregates
+- add city/district/municipality views
+- add initial H3 aggregates where coordinates allow
 
-## Phase 3: Notebook Analytics
+Success: useful weekly notebook analysis without manual data wrangling.
 
-- create H3 daily metrics
-- create reusable SQL queries
-- create Jupyter notebooks for area comparisons
-- create Jupyter notebooks for listing history
-- validate rent vs sale and flat vs house analytics
+## Phase 4: Source Expansion
 
-Success means the project is already useful without any web interface.
+- add second source after OLX is stable
+- reuse Bronze contract and sink path
+- keep source-specific parsing isolated
 
-## Phase 4: Analytics Web App
-
-- render the rent map
-- render the sale map
-- add area history charts
-- expose listing detail history
-
-Success means the app answers practical questions about where to rent or buy.
-
-## Phase 5: Expansion
-
-- add second and third sources
-- add suburb comparisons
-- add duplicate detection across sources
-- add amenity extraction
-
-## Phase 6: Decision Support
-
-- build neighborhood scores from transparent metrics
-- add alerting for price drops or new supply
-- add personal shortlists and watch areas
-- add recommendation logic based on user preferences
+Success: second source lands in Bronze without breaking OLX pipeline.

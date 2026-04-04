@@ -14,9 +14,16 @@ The goal is to collect flat and house listings over time, normalize them into a 
 
 ## Current Direction
 
-- Phase 1: Python scraping + Neon Postgres storage
-- Phase 2: Jupyter notebook analysis on top of Neon
-- Phase 3: lightweight web app, likely Next.js on Vercel
+- Phase 1: OLX-only ingestion (rent + sale) with detail-page enrichment.
+- Phase 1 storage: BigQuery Bronze append-only tables (`rent_bronze`, `sale_bronze`).
+- Phase 2: Silver/Gold transformations (cleaning, dedup, SCD, aggregates).
+- Phase 3: notebook analytics and lightweight web app.
+
+## Data Layers
+
+- Bronze: parse everything in append mode (raw + normalized facts, no dedup, no SCD).
+- Silver: cleaning, canonicalization, deduplication, and SCD (`is_current`, `valid_from`, `valid_to`).
+- Gold: aggregated, analytics-ready datasets for notebooks and the future app.
 
 ## Proposed Stack
 
@@ -24,7 +31,7 @@ The goal is to collect flat and house listings over time, normalize them into a 
 - Python version: 3.13
 - Environment and dependency manager: `uv`
 - Linting and formatting: `ruff`
-- Database: Neon Postgres
+- Local parse artifacts: JSON under `data/parsed/` (used by parse job and sink job)
 - Jobs: GitHub Actions scheduled workflows
 - Notebook analysis: Jupyter + SQL/Pandas
 - Geospatial indexing: H3 via Python `h3`
@@ -40,6 +47,8 @@ The goal is to collect flat and house listings over time, normalize them into a 
 - [docs/collection-policy.md](/home/user/domus-dweller/docs/collection-policy.md)
 - [docs/decisions.md](/home/user/domus-dweller/docs/decisions.md)
 - [docs/data-sources.md](/home/user/domus-dweller/docs/data-sources.md)
+- [docs/bigquery-dbt.md](/home/user/domus-dweller/docs/bigquery-dbt.md)
+- [docs/bigquery-ingestion.md](/home/user/domus-dweller/docs/bigquery-ingestion.md)
 - [docs/phase-1-ingestion.md](/home/user/domus-dweller/docs/phase-1-ingestion.md)
 - [docs/roadmap.md](/home/user/domus-dweller/docs/roadmap.md)
 - [docs/schema-v1.md](/home/user/domus-dweller/docs/schema-v1.md)
@@ -72,12 +81,28 @@ uv run ruff format .
 uv run pytest
 ```
 
-## Environment
+## Runbook
 
-Before any database work or ingestion runs, you need to provide Neon connection variables.
+Local parse:
 
-Start with:
+```bash
+make daily-olx-parse DATE=$(date +%F) PAGES=30
+```
 
-- `NEON_DATABASE_URL`
+BigQuery bootstrap:
 
-See [.env.example](/home/user/domus-dweller/.env.example) for the current contract.
+```bash
+make bigquery-bootstrap BQ_PROJECT=<project-id> BQ_DATASET=bronze BQ_LOCATION=EU
+```
+
+Local sink:
+
+```bash
+make daily-olx-sink-bigquery DATE=$(date +%F) BQ_PROJECT=<project-id> BQ_DATASET=bronze
+```
+
+Full direct mode (without parse artifacts):
+
+```bash
+make daily-olx-bigquery BQ_PROJECT=<project-id> BQ_DATASET=bronze
+```

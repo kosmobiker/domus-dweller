@@ -5,6 +5,7 @@ description = "Housing analytics pipeline for Krakow and nearby suburbs."
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    "google-cloud-bigquery>=3.38.0",
     "h3>=4.2.2",
     "httpx>=0.28.1",
     "psycopg[binary]>=3.2.6",
