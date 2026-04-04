@@ -13,6 +13,7 @@ When adding a source:
 - map to the canonical schema
 - tag unsupported fields instead of guessing
 - write a parser fixture before broad crawling
+- for current OLX flow, prioritize robust search-page extraction over fragile detail-page scraping
 
 ## 2. Historical Modeling
 
@@ -61,7 +62,7 @@ Default to rule-based or statistical methods first. Only add models after the ba
 
 Before adding any dependency or service:
 
-- check whether Neon free tier and Vercel free tier are enough
+- check whether BigQuery Sandbox and Vercel free tier are enough
 - prefer GitHub Actions scheduled jobs over always-on workers
 - avoid storage-heavy raw HTML retention if compact JSON is enough
 - avoid paid geocoding and paid map tiles

@@ -10,10 +10,10 @@ This dbt project is the transformation layer for OLX data in BigQuery:
 
 In dataset `bronze` (configurable via `--vars`):
 
-- `olx_rent_all`
-- `olx_sale_all`
+- `rent_bronze`
+- `sale_bronze`
 
-Each table is expected to contain enriched ingestion columns (including `detail_params*` fields).
+Each table is expected to contain append-only Bronze ingestion columns (including `detail_params*` fields where available).
 
 ## Local Setup
 
@@ -34,6 +34,7 @@ uvx --from dbt-bigquery dbt --project-dir packages/analytics/dbt --profiles-dir 
 
 ## Suggested GitHub Actions Flow
 
-1. Run ingestion (`make daily-olx`) and upload/load Bronze rows to BigQuery tables.
-2. Run dbt build against BigQuery.
-3. Publish `gold_olx_daily_metrics` to downstream consumers (notebooks/app).
+1. Run parse job (`make daily-olx-parse`) and upload parsed artifacts.
+2. Run sink job (`make daily-olx-sink-bigquery`) and load rows to Bronze tables.
+3. Run dbt build against BigQuery.
+4. Publish `gold_olx_daily_metrics` to downstream consumers (notebooks/app).
