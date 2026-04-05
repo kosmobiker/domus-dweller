@@ -1,9 +1,8 @@
-import json
-from datetime import date, datetime, UTC
+from datetime import UTC, date, datetime
 from unittest.mock import MagicMock, patch
 
-from domus_dweller.sources.olx.parser import parse_search_results
 from domus_dweller.sinks.bigquery import load_rows_to_bigquery
+from domus_dweller.sources.olx.parser import parse_search_results
 
 
 def test_olx_end_to_end_pipeline_logic() -> None:
