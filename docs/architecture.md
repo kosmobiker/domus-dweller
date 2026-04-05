@@ -37,45 +37,23 @@ There should be five layers.
 
 ### 1. Source Adapters
 
-Each source adapter is isolated and returns a common intermediate object:
+Each source adapter is isolated and returns a common intermediate object.
 
-- source name
-- source listing id
-- source URL
-- listing type: `rent` or `sale`
-- property type: `flat`, `house`, later `room`
-- title
-- description
-- address text
-- district or municipality
-- price
-- currency
-- area sqm
-- rooms
-- floor
-- latitude and longitude when available
-- image URLs
-- seller type
-- raw payload fragment
-
-This layer should know source-specific selectors and source-specific quirks.
+**Note on Anti-Bot Hurdles:**
+- **Search Pages:** Currently fetchable from GitHub Actions (low friction).
+- **Detail Pages:** Frequently blocked by CloudFlare/Firewalls on GHA IPs.
+- **Otodom:** Highly protected; search-page scraping from GHA is currently unstable or blocked.
 
 ### 2. Bronze Layer (Append-Only Facts)
 
-This layer persists parsed facts exactly as observed.
-
-Responsibilities:
-
-- persist every parsed row from source adapters
-- include ingest metadata (`ingest_run_id`, `observed_at`, source keys)
-- store raw payload fragments and normalized payload side by side
-- avoid deduplication or SCD logic
-
-Bronze is optimized for replayability and auditability, not for query convenience.
+This layer persists parsed facts exactly as observed. Orchestrated via GitHub Actions and the `sink` job.
 
 ### 3. Silver Layer (Clean + Dedup + SCD)
 
 This layer converts Bronze facts into curated listing history.
+- **Engine:** dbt (data build tool).
+- **Orchestration:** GitHub Actions `dbt-run` job following the `sink` job.
+- **Identity:** Listings are tracked by `source` + `source_listing_id`.
 
 Responsibilities:
 
