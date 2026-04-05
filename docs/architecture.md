@@ -51,8 +51,8 @@ This layer persists parsed facts exactly as observed. Orchestrated via GitHub Ac
 ### 3. Silver Layer (Clean + Dedup + SCD)
 
 This layer converts Bronze facts into curated listing history.
-- **Engine:** dbt (data build tool).
-- **Orchestration:** GitHub Actions `dbt-run` job following the `sink` job.
+- **Engine:** BigQuery SQL / Scripting.
+- **Orchestration:** GitHub Actions `sink` job followed by transformation steps.
 - **Identity:** Listings are tracked by `source` + `source_listing_id`.
 
 Responsibilities:
