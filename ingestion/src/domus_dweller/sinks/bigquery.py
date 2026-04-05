@@ -7,6 +7,8 @@ from datetime import UTC, date, datetime
 from hashlib import sha256
 from typing import Any, Protocol
 
+from domus_dweller.sinks.bigquery_bootstrap import BRONZE_SCHEMA_FIELDS
+
 
 class BigQueryClientProtocol(Protocol):
     def load_table_from_json(
@@ -49,11 +51,18 @@ def _payload_hash(row: dict[str, Any]) -> str:
 def _normalize_for_bigquery(
     row: dict[str, Any], *, mode: str, snapshot_date: date, ingested_at: datetime
 ) -> dict[str, Any]:
-    normalized = dict(row)
-    normalized["mode"] = mode
-    normalized.setdefault("layer", "bronze")
-    normalized.setdefault("snapshot_date", snapshot_date.isoformat())
-    normalized["ingested_at"] = ingested_at.astimezone(UTC).isoformat()
+    # Essential metadata
+    base = dict(row)
+    base["mode"] = mode
+    base.setdefault("layer", "bronze")
+    base.setdefault("snapshot_date", snapshot_date.isoformat())
+    base["ingested_at"] = ingested_at.astimezone(UTC).isoformat()
+    base["raw_json"] = dict(row)
+    base["payload_hash"] = _payload_hash(base)
+
+    # Filter only columns present in v2 schema
+    allowed_cols = {f.name for f in BRONZE_SCHEMA_FIELDS}
+    normalized = {k: v for k, v in base.items() if k in allowed_cols}
 
     missing = [field for field in REQUIRED_FIELDS if not normalized.get(field)]
     if missing:
@@ -62,8 +71,6 @@ def _normalize_for_bigquery(
             f"Row keys: {sorted(normalized)}"
         )
 
-    normalized["raw_json"] = dict(row)
-    normalized["payload_hash"] = _payload_hash(normalized)
     return normalized
 
 

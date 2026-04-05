@@ -19,3 +19,6 @@
 
 7. Keep BigQuery Sandbox only, or enable billing with strict budget alert for Silver/Gold later?
 8. Do we add a weekly backfill job or stay daily-only?
+9. How to handle Otodom and OLX detail page firewalls in GitHub Actions? (GHA IPs are often blocked).
+10. Should we use a local-run + git-push approach for detail pages if GHA remains blocked?
+11. Should we run dbt as a separate GHA job or combine it with the sink job?

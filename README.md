@@ -22,17 +22,18 @@ The goal is to collect flat and house listings over time, normalize them into a 
 ## Data Layers
 
 - Bronze: parse everything in append mode (raw + normalized facts, no dedup, no SCD).
-- Silver: cleaning, canonicalization, deduplication, and SCD (`is_current`, `valid_from`, `valid_to`).
+- Silver: cleaning, canonicalization, deduplication, and SCD via **dbt** (`is_current`, `valid_from`, `valid_to`).
 - Gold: aggregated, analytics-ready datasets for notebooks and the future app.
 
 ## Proposed Stack
 
 - Data pipeline: Python
+- Transformation: **dbt** (BigQuery adapter)
 - Python version: 3.13
 - Environment and dependency manager: `uv`
 - Linting and formatting: `ruff`
 - Local parse artifacts: JSON under `data/parsed/` (used by parse job and sink job)
-- Jobs: GitHub Actions scheduled workflows
+- Jobs: GitHub Actions scheduled workflows (Ingestion + Sink + dbt build)
 - Notebook analysis: Jupyter + SQL/Pandas
 - Geospatial indexing: H3 via Python `h3`
 - Maps later: MapLibre + OpenStreetMap tiles
