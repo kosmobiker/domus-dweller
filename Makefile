@@ -1,15 +1,10 @@
-.PHONY: lint test ci daily-olx-rent daily-olx-sale daily-olx daily-olx-parse daily-olx-sink-bigquery show-data dbt-debug dbt-build dbt-run dbt-test bigquery-bootstrap daily-olx-bigquery-rent daily-olx-bigquery-sale daily-olx-bigquery
+.PHONY: lint test ci daily-olx-rent daily-olx-sale daily-olx daily-olx-parse daily-olx-sink-motherduck show-data motherduck-bootstrap daily-olx-motherduck-rent daily-olx-motherduck-sale daily-olx-motherduck
 
 COV_MIN := 70
 UA := Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36
 OLX_BASE_URL := https://www.olx.pl/nieruchomosci
 FETCH_FLAGS := --fail --silent --show-error --location --retry 3 --retry-delay 2 --connect-timeout 10 --max-time 45
-DBT_DIR := packages/analytics/dbt
-DBT_PROFILES_DIR ?= $(DBT_DIR)
-DBT_VARS ?= {"bronze_dataset":"bronze","silver_dataset":"silver","gold_dataset":"gold"}
-BQ_PROJECT ?=
-BQ_DATASET ?= bronze
-BQ_LOCATION ?= EU
+MD_DATABASE ?= my_db
 # Approximate 30 km coverage around Krakow, configurable per run:
 # make daily-olx CITIES="krakow wieliczka skawina"
 CITIES ?= krakow wieliczka skawina niepolomice zabierzow zielonki swiatniki-gorne
@@ -80,12 +75,11 @@ daily-olx: daily-olx-rent daily-olx-sale
 
 daily-olx-parse: daily-olx
 
-daily-olx-sink-bigquery:
-	@test -n "$(BQ_PROJECT)" || (echo "Set BQ_PROJECT=<gcp-project-id>"; exit 1)
+daily-olx-sink-motherduck:
 	@attempt=1; \
-	until uv run python -m domus_dweller.sinks.olx_files_to_bigquery --mode both --project "$(BQ_PROJECT)" --dataset "$(BQ_DATASET)" --date "$(DATE)"; do \
+	until uv run python -m domus_dweller.sinks.olx_files_to_motherduck --mode both --database "$(MD_DATABASE)" --date "$(DATE)"; do \
 		if [ $$attempt -ge 3 ]; then \
-			echo "BigQuery sink failed after $$attempt attempts"; \
+			echo "MotherDuck sink failed after $$attempt attempts"; \
 			exit 1; \
 		fi; \
 		delay=$$((attempt * 10)); \
@@ -97,28 +91,13 @@ daily-olx-sink-bigquery:
 show-data:
 	find data -maxdepth 4 -type f | sort
 
-dbt-debug:
-	uvx --from dbt-bigquery dbt --project-dir $(DBT_DIR) --profiles-dir $(DBT_PROFILES_DIR) debug
+motherduck-bootstrap:
+	uv run python -m domus_dweller.sinks.motherduck_bootstrap --database "$(MD_DATABASE)"
 
-dbt-build:
-	uvx --from dbt-bigquery dbt --project-dir $(DBT_DIR) --profiles-dir $(DBT_PROFILES_DIR) build --vars '$(DBT_VARS)'
+daily-olx-motherduck-rent:
+	uv run python -m domus_dweller.sources.olx.ingest_motherduck --mode rent --database "$(MD_DATABASE)" --pages $(PAGES) --cities $(CITIES) --property-types-rent $(PROPERTY_TYPES_RENT)
 
-dbt-run:
-	uvx --from dbt-bigquery dbt --project-dir $(DBT_DIR) --profiles-dir $(DBT_PROFILES_DIR) run --vars '$(DBT_VARS)'
+daily-olx-motherduck-sale:
+	uv run python -m domus_dweller.sources.olx.ingest_motherduck --mode sale --database "$(MD_DATABASE)" --pages $(PAGES) --cities $(CITIES) --property-types-sale $(PROPERTY_TYPES_SALE)
 
-dbt-test:
-	uvx --from dbt-bigquery dbt --project-dir $(DBT_DIR) --profiles-dir $(DBT_PROFILES_DIR) test --vars '$(DBT_VARS)'
-
-bigquery-bootstrap:
-	@test -n "$(BQ_PROJECT)" || (echo "Set BQ_PROJECT=<gcp-project-id>"; exit 1)
-	uv run python -m domus_dweller.sinks.bigquery_bootstrap --project "$(BQ_PROJECT)" --dataset "$(BQ_DATASET)" --location "$(BQ_LOCATION)"
-
-daily-olx-bigquery-rent:
-	@test -n "$(BQ_PROJECT)" || (echo "Set BQ_PROJECT=<gcp-project-id>"; exit 1)
-	uv run python -m domus_dweller.sources.olx.ingest_bigquery --mode rent --project "$(BQ_PROJECT)" --dataset "$(BQ_DATASET)" --pages $(PAGES) --cities $(CITIES) --property-types-rent $(PROPERTY_TYPES_RENT)
-
-daily-olx-bigquery-sale:
-	@test -n "$(BQ_PROJECT)" || (echo "Set BQ_PROJECT=<gcp-project-id>"; exit 1)
-	uv run python -m domus_dweller.sources.olx.ingest_bigquery --mode sale --project "$(BQ_PROJECT)" --dataset "$(BQ_DATASET)" --pages $(PAGES) --cities $(CITIES) --property-types-sale $(PROPERTY_TYPES_SALE)
-
-daily-olx-bigquery: daily-olx-bigquery-rent daily-olx-bigquery-sale
+daily-olx-motherduck: daily-olx-motherduck-rent daily-olx-motherduck-sale

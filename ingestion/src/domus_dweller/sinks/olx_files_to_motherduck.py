@@ -6,22 +6,21 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from domus_dweller.sinks.bigquery import load_rows_to_bigquery
+from domus_dweller.sinks.motherduck import load_rows_to_motherduck
 
 
 def _build_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Load already parsed+enriched OLX JSON files into BigQuery Bronze tables "
+            "Load already parsed+enriched OLX JSON files into MotherDuck Bronze tables "
             "(`rent_bronze` and `sale_bronze`)."
         )
     )
     parser.add_argument("--mode", choices=("rent", "sale", "both"), default="both")
-    parser.add_argument("--project", required=True, help="BigQuery project id.")
     parser.add_argument(
-        "--dataset",
-        default="bronze",
-        help="BigQuery dataset. Defaults to `bronze`.",
+        "--database",
+        default="my_db",
+        help="MotherDuck database name. Defaults to `my_db`.",
     )
     parser.add_argument(
         "--date",
@@ -58,16 +57,14 @@ def _sink_mode(
     *,
     mode: str,
     input_path: Path,
-    project: str,
-    dataset: str,
+    database: str,
     snapshot_date: date,
 ) -> int:
     rows = _read_rows(input_path)
-    inserted = load_rows_to_bigquery(
+    inserted = load_rows_to_motherduck(
         rows,
         mode=mode,
-        project=project,
-        dataset=dataset,
+        database=database,
         snapshot_date=snapshot_date,
     )
     print(f"[sink:{mode}] Loaded {inserted} rows from {input_path}")
@@ -91,12 +88,11 @@ def main() -> None:
         total_inserted += _sink_mode(
             mode=mode,
             input_path=path,
-            project=args.project,
-            dataset=args.dataset,
+            database=args.database,
             snapshot_date=snapshot_date,
         )
 
-    print(f"Finished loading OLX rows to BigQuery. Total inserted rows: {total_inserted}.")
+    print(f"Finished loading OLX rows to MotherDuck. Total inserted rows: {total_inserted}.")
 
 
 if __name__ == "__main__":

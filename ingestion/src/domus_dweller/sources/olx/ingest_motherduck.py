@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from domus_dweller.sinks.bigquery import load_rows_to_bigquery
+from domus_dweller.sinks.motherduck import load_rows_to_motherduck
 from domus_dweller.sources.olx.parser import parse_search_results
 
 OLX_BASE_URL = "https://www.olx.pl/nieruchomosci"
@@ -30,14 +30,13 @@ DEFAULT_SALE_PROPERTY_TYPES = ("mieszkania", "domy")
 
 def _build_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fetch and parse OLX listings, then load rows directly to BigQuery."
+        description="Fetch and parse OLX listings, then load rows directly to MotherDuck."
     )
     parser.add_argument("--mode", choices=("rent", "sale", "both"), default="both")
-    parser.add_argument("--project", required=True, help="BigQuery project id.")
     parser.add_argument(
-        "--dataset",
-        default="bronze",
-        help="BigQuery dataset. Defaults to `bronze`.",
+        "--database",
+        default="my_db",
+        help="MotherDuck database name. Defaults to `my_db`.",
     )
     parser.add_argument(
         "--snapshot-date",
@@ -111,8 +110,7 @@ def _collect_search_rows(
                     parsed = parse_search_results(raw_html)
                     if not parsed:
                         print(
-                            f"[olx:{mode}] Empty parsed page at {seed} "
-                            f"page {page}, stopping seed"
+                            f"[olx:{mode}] Empty parsed page at {seed} page {page}, stopping seed"
                         )
                         break
 
@@ -129,27 +127,10 @@ def _collect_search_rows(
     return rows
 
 
-def _prepare_rows_for_load(
-    rows: list[dict[str, Any]],
+def run_olx_mode_to_motherduck(
     *,
     mode: str,
-    snapshot_date: date,
-) -> list[dict[str, Any]]:
-    prepared: list[dict[str, Any]] = []
-    for row in rows:
-        payload = dict(row)
-        payload["mode"] = mode
-        payload["snapshot_date"] = snapshot_date.isoformat()
-        payload["layer"] = "bronze"
-        prepared.append(payload)
-    return prepared
-
-
-def run_olx_mode_to_bigquery(
-    *,
-    mode: str,
-    project: str,
-    dataset: str,
+    database: str,
     cities: list[str],
     property_types: list[str],
     pages: int,
@@ -164,19 +145,14 @@ def run_olx_mode_to_bigquery(
         search_timeout_sec=search_timeout_sec,
     )
     print(f"[olx:{mode}] Search rows collected: {len(search_rows)}")
-    prepared_rows = _prepare_rows_for_load(
+
+    inserted = load_rows_to_motherduck(
         search_rows,
         mode=mode,
+        database=database,
         snapshot_date=snapshot_date,
     )
-    inserted = load_rows_to_bigquery(
-        prepared_rows,
-        mode=mode,
-        project=project,
-        dataset=dataset,
-        snapshot_date=snapshot_date,
-    )
-    print(f"[olx:{mode}] Inserted {inserted} rows into {project}.{dataset}.{mode}_bronze")
+    print(f"[olx:{mode}] Inserted {inserted} rows into {database}.bronze.{mode}_bronze")
     return inserted
 
 
@@ -187,13 +163,10 @@ def main() -> None:
     modes = ["rent", "sale"] if args.mode == "both" else [args.mode]
     total_inserted = 0
     for mode in modes:
-        property_types = (
-            args.property_types_rent if mode == "rent" else args.property_types_sale
-        )
-        inserted = run_olx_mode_to_bigquery(
+        property_types = args.property_types_rent if mode == "rent" else args.property_types_sale
+        inserted = run_olx_mode_to_motherduck(
             mode=mode,
-            project=args.project,
-            dataset=args.dataset,
+            database=args.database,
             cities=args.cities,
             property_types=property_types,
             pages=args.pages,
@@ -202,7 +175,7 @@ def main() -> None:
         )
         total_inserted += inserted
 
-    print(f"Finished OLX BigQuery ingestion. Total inserted rows: {total_inserted}.")
+    print(f"Finished OLX MotherDuck ingestion. Total inserted rows: {total_inserted}.")
 
 
 if __name__ == "__main__":

@@ -22,9 +22,9 @@
 ## Platform Direction
 
 - scheduler: GitHub Actions.
-- Bronze warehouse: BigQuery.
+- Bronze warehouse: MotherDuck (DuckDB).
 - parser/sink code: Python (`uv`, `ruff`, `pytest`).
-- Alembic: removed for BigQuery Sandbox compatibility.
+- Alembic: not used, prefer direct SQL/DuckDB migrations.
 
 ## Cost Constraint
 
