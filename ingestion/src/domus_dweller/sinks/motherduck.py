@@ -9,6 +9,17 @@ from typing import Any
 import duckdb
 
 REQUIRED_FIELDS = ("source", "source_listing_id", "source_url", "mode", "snapshot_date", "layer")
+REQUIRED_SINK_COLUMNS = (
+    "source",
+    "source_listing_id",
+    "source_url",
+    "mode",
+    "snapshot_date",
+    "layer",
+    "ingested_at",
+    "payload_hash",
+    "raw_json",
+)
 
 
 def _canonical_json(value: dict[str, Any]) -> str:
@@ -48,6 +59,16 @@ def _normalize_row(
     return base
 
 
+def _quote_identifier(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
+
+def _table_columns(con: duckdb.DuckDBPyConnection, table_name: str) -> list[str]:
+    pragma_table_name = table_name.replace("'", "''")
+    rows = con.execute(f"PRAGMA table_info('{pragma_table_name}')").fetchall()
+    return [str(row[1]) for row in rows]
+
+
 def load_rows_to_motherduck(
     rows: list[dict[str, Any]],
     *,
@@ -80,16 +101,43 @@ def load_rows_to_motherduck(
         for row in rows
     ]
 
+    import pyarrow as pa
+
     # Connect to MotherDuck
     con = duckdb.connect(f"md:{database}?token={token}")
 
     table_name = f"bronze.{mode}_bronze"
 
-    # Use DuckDB's ability to insert from a list of dicts (via a replacement scan or json)
-    # Since we have a list of dicts, we can use a temporary view or just JSON string
-    json_rows = json.dumps(normalized_rows)
+    # Use pyarrow to efficiently load the list of dicts
+    arrow_table = pa.Table.from_pylist(normalized_rows)
 
-    con.execute(f"INSERT INTO {table_name} SELECT * FROM read_json_auto(?)", [json_rows])
+    table_columns = _table_columns(con, table_name)
+    if not table_columns:
+        raise ValueError(f"MotherDuck table has no columns or does not exist: {table_name}")
+
+    source_columns = set(arrow_table.column_names)
+    missing_required = [col for col in REQUIRED_SINK_COLUMNS if col not in source_columns]
+    if missing_required:
+        raise ValueError(
+            "Normalized rows are missing required sink columns: "
+            + ", ".join(sorted(missing_required))
+        )
+
+    insert_columns = [col for col in table_columns if col in source_columns]
+    if not insert_columns:
+        raise ValueError(
+            f"No overlapping columns between normalized rows and table `{table_name}`. "
+            f"Table columns: {table_columns}"
+        )
+
+    insert_columns_sql = ", ".join(_quote_identifier(col) for col in insert_columns)
+    select_columns_sql = ", ".join(
+        f"arrow_table.{_quote_identifier(col)}" for col in insert_columns
+    )
+    con.execute(
+        f"INSERT INTO {table_name} ({insert_columns_sql}) "
+        f"SELECT {select_columns_sql} FROM arrow_table"
+    )
 
     count = len(normalized_rows)
     con.close()

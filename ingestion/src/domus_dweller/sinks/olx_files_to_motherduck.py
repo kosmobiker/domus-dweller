@@ -46,6 +46,34 @@ def _default_input_path(*, snapshot_date: date, mode: str) -> Path:
     return Path(f"data/parsed/{snapshot_date.isoformat()}/olx_{mode}_all.json")
 
 
+def _resolve_input_path(*, provided_path: Path | None, snapshot_date: date, mode: str) -> Path:
+    if provided_path is not None:
+        if not provided_path.exists():
+            raise FileNotFoundError(f"Input file does not exist for mode `{mode}`: {provided_path}")
+        return provided_path
+
+    default_path = _default_input_path(snapshot_date=snapshot_date, mode=mode)
+    if default_path.exists():
+        return default_path
+
+    # GitHub Actions artifact extraction can add an extra date directory level.
+    matches = sorted(default_path.parent.rglob(default_path.name))
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise FileNotFoundError(
+            "Multiple candidate input files found for mode "
+            f"`{mode}` under {default_path.parent}: {matches}"
+        )
+
+    raise FileNotFoundError(
+        "Input file does not exist for mode "
+        f"`{mode}`. Looked for {default_path}. "
+        "Run parse first (for example: `make daily-olx-parse DATE=YYYY-MM-DD`) "
+        "or provide `--input-rent/--input-sale`."
+    )
+
+
 def _read_rows(path: Path) -> list[dict[str, Any]]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, list):
@@ -75,16 +103,18 @@ def main() -> None:
     args = _build_args()
     snapshot_date = date.fromisoformat(args.date) if args.date else date.today()
     modes = ["rent", "sale"] if args.mode == "both" else [args.mode]
-    input_paths = {
-        "rent": args.input_rent or _default_input_path(snapshot_date=snapshot_date, mode="rent"),
-        "sale": args.input_sale or _default_input_path(snapshot_date=snapshot_date, mode="sale"),
-    }
+    input_paths: dict[str, Path] = {}
+    for mode in modes:
+        provided_path = args.input_rent if mode == "rent" else args.input_sale
+        input_paths[mode] = _resolve_input_path(
+            provided_path=provided_path,
+            snapshot_date=snapshot_date,
+            mode=mode,
+        )
 
     total_inserted = 0
     for mode in modes:
         path = input_paths[mode]
-        if not path.exists():
-            raise FileNotFoundError(f"Input file does not exist for mode `{mode}`: {path}")
         total_inserted += _sink_mode(
             mode=mode,
             input_path=path,
