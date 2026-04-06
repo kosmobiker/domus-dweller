@@ -1,8 +1,13 @@
+import json
 from datetime import UTC, date, datetime
 from unittest.mock import MagicMock, patch
 
 from domus_dweller.sinks.motherduck import load_rows_to_motherduck
 from domus_dweller.sources.olx.parser import parse_search_results
+
+
+def _pragma_rows_for(columns: list[str]) -> list[tuple[object, ...]]:
+    return [(idx, name, "VARCHAR", False, None, False) for idx, name in enumerate(columns)]
 
 
 def test_olx_end_to_end_pipeline_logic() -> None:
@@ -68,9 +73,45 @@ def test_olx_end_to_end_pipeline_logic() -> None:
     snapshot_date = date(2026, 4, 5)
     ingested_at = datetime(2026, 4, 5, 12, 0, 0, tzinfo=UTC)
 
+    pragma_result = MagicMock()
+    pragma_result.fetchall.return_value = _pragma_rows_for(
+        [
+            "source",
+            "source_listing_id",
+            "source_url",
+            "mode",
+            "snapshot_date",
+            "layer",
+            "ingested_at",
+            "payload_hash",
+            "raw_json",
+            "price_total",
+            "seller_segment",
+        ]
+    )
+    insert_result = MagicMock()
+    mock_con.execute.side_effect = [pragma_result, insert_result]
+
     # We call the sink logic which performs the final normalization
     with patch("duckdb.connect", return_value=mock_con), \
-         patch("os.getenv", return_value="fake-token"):
+         patch("os.getenv", return_value="fake-token"), \
+         patch("pyarrow.Table") as mock_table:
+        mock_arrow_table = MagicMock()
+        mock_arrow_table.column_names = [
+            "source",
+            "source_listing_id",
+            "source_url",
+            "mode",
+            "snapshot_date",
+            "layer",
+            "ingested_at",
+            "payload_hash",
+            "raw_json",
+            "price_total",
+            "seller_segment",
+            "extra_not_in_table",
+        ]
+        mock_table.from_pylist.return_value = mock_arrow_table
         inserted = load_rows_to_motherduck(
             listings,
             mode="rent",
@@ -81,15 +122,13 @@ def test_olx_end_to_end_pipeline_logic() -> None:
 
     # 5. Then: Verify the data sent to MotherDuck
     assert inserted == 1
-    mock_con.execute.assert_called_once()
-    args, _ = mock_con.execute.call_args
-    sql = args[0]
-    params = args[1]
-
-    assert "INSERT INTO bronze.rent_bronze" in sql
-    assert len(params) == 1
-    import json
-    sent_rows = json.loads(params[0])
+    assert mock_con.execute.call_count == 2
+    sql = mock_con.execute.call_args_list[1].args[0]
+    assert "INSERT INTO bronze.rent_bronze (" in sql
+    assert 'SELECT arrow_table."source"' in sql
+    assert "extra_not_in_table" not in sql
+    mock_table.from_pylist.assert_called_once()
+    sent_rows = mock_table.from_pylist.call_args.args[0]
     assert len(sent_rows) == 1
     md_row = sent_rows[0]
 
