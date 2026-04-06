@@ -1,4 +1,4 @@
-name: Daily OLX -> BigQuery
+name: Daily OLX -> MotherDuck
 
 on:
   schedule:
@@ -16,8 +16,8 @@ on:
         type: string
 
 env:
-  BQ_DATASET: bronze
-  BQ_LOCATION: EU
+  MD_DATABASE: my_db
+  MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
 
 jobs:
   parse:
@@ -92,13 +92,8 @@ jobs:
           name: olx-parsed-${{ needs.parse.outputs.run_date }}
           path: data/parsed/${{ needs.parse.outputs.run_date }}
 
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
+      - name: Bootstrap MotherDuck schemas
+        run: make motherduck-bootstrap MD_DATABASE=${{ env.MD_DATABASE }}
 
-      - name: Bootstrap Bronze tables
-        run: make bigquery-bootstrap BQ_PROJECT=${{ secrets.GCP_PROJECT_ID }} BQ_DATASET=${{ env.BQ_DATASET }} BQ_LOCATION=${{ env.BQ_LOCATION }}
-
-      - name: Sink to BigQuery (with retries)
-        run: make daily-olx-sink-bigquery DATE=${{ needs.parse.outputs.run_date }} BQ_PROJECT=${{ secrets.GCP_PROJECT_ID }} BQ_DATASET=${{ env.BQ_DATASET }}
+      - name: Sink to MotherDuck (with retries)
+        run: make daily-olx-sink-motherduck DATE=${{ needs.parse.outputs.run_date }} MD_DATABASE=${{ env.MD_DATABASE }}
