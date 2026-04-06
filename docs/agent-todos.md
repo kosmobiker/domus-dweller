@@ -1,6 +1,6 @@
 # Agent To-Dos
 
-Current objective: stabilize OLX daily ingestion into BigQuery Bronze, then start Silver.
+Current objective: stabilize OLX daily ingestion into MotherDuck Bronze, then start Silver.
 
 ## Current Baseline
 
@@ -8,7 +8,7 @@ Current objective: stabilize OLX daily ingestion into BigQuery Bronze, then star
 - Geography: Krakow + nearby municipalities (~30 km).
 - Modes: `rent`, `sale`.
 - Bronze policy: append-only, no dedup, no SCD.
-- Warehouse: BigQuery Sandbox-compatible flow.
+- Warehouse: MotherDuck (DuckDB) Bronze flow.
 - Scheduler: GitHub Actions (`parse` job + `sink` job).
 
 ## Immediate Backlog (Next 2-3 Days)
@@ -49,4 +49,4 @@ Current objective: stabilize OLX daily ingestion into BigQuery Bronze, then star
 - [ ] At least 3 consecutive daily OLX runs complete in GitHub Actions.
 - [ ] `rent_bronze` and `sale_bronze` both receive rows every day.
 - [ ] Core parser and sink tests are green.
-- [ ] Documentation is consistent with OLX + BigQuery + Bronze-first flow.
+- [ ] Documentation is consistent with OLX + MotherDuck Bronze-first flow.

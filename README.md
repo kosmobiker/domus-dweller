@@ -15,7 +15,7 @@ The goal is to collect flat and house listings over time, normalize them into a 
 ## Current Direction
 
 - Phase 1: OLX-only ingestion (rent + sale) from search pages.
-- Phase 1 storage: BigQuery Bronze append-only tables (`rent_bronze`, `sale_bronze`).
+- Phase 1 storage: MotherDuck (DuckDB) Bronze append-only tables (`rent_bronze`, `sale_bronze`).
 - Phase 2: Silver/Gold transformations (cleaning, dedup, SCD, aggregates).
 - Phase 3: notebook analytics and lightweight web app.
 
@@ -25,10 +25,10 @@ The goal is to collect flat and house listings over time, normalize them into a 
 - Silver: cleaning, canonicalization, deduplication, and SCD via **dbt** (`is_current`, `valid_from`, `valid_to`).
 - Gold: aggregated, analytics-ready datasets for notebooks and the future app.
 
-## Proposed Stack
+-## Proposed Stack
 
 - Data pipeline: Python
-- Transformation: **dbt** (BigQuery adapter)
+- Transformation: DuckDB/MotherDuck SQL scripts + notebooks
 - Python version: 3.13
 - Environment and dependency manager: `uv`
 - Linting and formatting: `ruff`
@@ -48,8 +48,7 @@ The goal is to collect flat and house listings over time, normalize them into a 
 - [docs/collection-policy.md](/home/user/domus-dweller/docs/collection-policy.md)
 - [docs/decisions.md](/home/user/domus-dweller/docs/decisions.md)
 - [docs/data-sources.md](/home/user/domus-dweller/docs/data-sources.md)
-- [docs/bigquery-dbt.md](/home/user/domus-dweller/docs/bigquery-dbt.md)
-- [docs/bigquery-ingestion.md](/home/user/domus-dweller/docs/bigquery-ingestion.md)
+- [docs/motherduck-ingestion.md](/home/user/domus-dweller/docs/motherduck-ingestion.md)
 - [docs/phase-1-ingestion.md](/home/user/domus-dweller/docs/phase-1-ingestion.md)
 - [docs/roadmap.md](/home/user/domus-dweller/docs/roadmap.md)
 - [docs/schema-v1.md](/home/user/domus-dweller/docs/schema-v1.md)
@@ -82,6 +81,8 @@ uv run ruff format .
 uv run pytest
 ```
 
+Always run `make ci` before pushing, it runs the lint and test matrix to mirror CI expectations.
+
 ## Runbook
 
 Local parse:
@@ -90,20 +91,20 @@ Local parse:
 make daily-olx-parse DATE=$(date +%F) PAGES=30
 ```
 
-BigQuery bootstrap:
+MotherDuck bootstrap:
 
 ```bash
-make bigquery-bootstrap BQ_PROJECT=<project-id> BQ_DATASET=bronze BQ_LOCATION=EU
+make motherduck-bootstrap MD_DATABASE=my_db
 ```
 
 Local sink:
 
 ```bash
-make daily-olx-sink-bigquery DATE=$(date +%F) BQ_PROJECT=<project-id> BQ_DATASET=bronze
+make daily-olx-sink-motherduck DATE=$(date +%F) MD_DATABASE=my_db
 ```
 
 Full direct mode (without parse artifacts):
 
 ```bash
-make daily-olx-bigquery BQ_PROJECT=<project-id> BQ_DATASET=bronze
+make daily-olx-motherduck MD_DATABASE=my_db PAGES=30 CITIES="krakow wieliczka"
 ```

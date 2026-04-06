@@ -58,11 +58,11 @@ Use "AI" only where it adds leverage:
 
 Default to rule-based or statistical methods first. Only add models after the baseline pipeline is reliable.
 
-## 6. Zero-Cost Skill
+-## 6. Zero-Cost Skill
 
 Before adding any dependency or service:
 
-- check whether BigQuery Sandbox and Vercel free tier are enough
+- check whether MotherDuck (DuckDB) and Vercel free tier are enough
 - prefer GitHub Actions scheduled jobs over always-on workers
 - avoid storage-heavy raw HTML retention if compact JSON is enough
 - avoid paid geocoding and paid map tiles
