@@ -16,7 +16,7 @@ No dedup and no SCD in ingestion. Those belong to Silver.
 - `uv` for env/deps
 - `ruff` for linting
 - `httpx` + `selectolax` for ingestion/parsing
-- BigQuery for Bronze storage (`rent_bronze`, `sale_bronze`)
+- MotherDuck (DuckDB) for Bronze storage (`bronze.rent_bronze`, `bronze.sale_bronze`)
 - GitHub Actions for daily scheduling
 
 ## Daily Job Shape
@@ -24,26 +24,26 @@ No dedup and no SCD in ingestion. Those belong to Silver.
 Two jobs in GitHub Actions:
 
 1. `parse` job:
-- run `make daily-olx-parse`
-- upload parsed artifacts for the same snapshot date
+   - run `make daily-olx-parse`
+   - upload parsed artifacts for the same snapshot date
 
 2. `sink` job:
-- download artifacts
-- run `make bigquery-bootstrap`
-- run `make daily-olx-sink-bigquery` (with retries)
+   - download artifacts
+   - run `make motherduck-bootstrap`
+   - run `make daily-olx-sink-motherduck` (with retries)
 
 ## Local Commands
 
 ```bash
 make daily-olx-parse DATE=2026-04-04 PAGES=30
-make bigquery-bootstrap BQ_PROJECT=<project-id> BQ_DATASET=bronze BQ_LOCATION=EU
-make daily-olx-sink-bigquery DATE=2026-04-04 BQ_PROJECT=<project-id> BQ_DATASET=bronze
+make motherduck-bootstrap MD_DATABASE=my_db
+make daily-olx-sink-motherduck DATE=2026-04-04 MD_DATABASE=my_db
 ```
 
 Direct one-step ingestion is also available:
 
 ```bash
-make daily-olx-bigquery BQ_PROJECT=<project-id> BQ_DATASET=bronze
+make daily-olx-motherduck MD_DATABASE=my_db PAGES=30 CITIES="krakow wieliczka"
 ```
 
 ## Testing Policy
@@ -58,6 +58,6 @@ make daily-olx-bigquery BQ_PROJECT=<project-id> BQ_DATASET=bronze
 Phase 1 is considered stable when:
 
 - at least 3 consecutive daily runs succeed in GitHub Actions,
-- both Bronze tables receive rows daily,
+- both MotherDuck Bronze tables receive rows daily,
 - parser + sink tests remain green in CI,
 - docs and runbook stay consistent with the actual workflow.

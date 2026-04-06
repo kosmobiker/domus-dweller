@@ -5,7 +5,7 @@
 - finalize OLX parsing quality and daily stability
 - run daily GitHub Actions parse/sink jobs
 - monitor null rates and parser drift
-- keep Bronze append-only in BigQuery
+- keep Bronze append-only in MotherDuck (DuckDB)
 
 Success: 3-7 consecutive successful daily runs with expected row growth.
 

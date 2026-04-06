@@ -21,7 +21,7 @@ Preferred order:
 - validate search collection, dedup-in-memory, and sink wiring
 - validate mode routing (`rent` vs `sale`)
 
-3. BigQuery sink functional tests
+3. MotherDuck sink functional tests
 - validate required field enforcement
 - validate payload hashing and append behavior
 - validate load-job error handling
