@@ -2,9 +2,9 @@
 
 ## Active Source (Now)
 
-1. OLX
+1. OLX (Tier 1)
 
-Current implementation is OLX-only. Otodom and other portals are deferred.
+Current implementation is OLX-only. Otodom (Tier 2) and other portals are deferred until the OLX pipeline and Silver sync are robust.
 
 ## Scope Rules (v1)
 
@@ -23,7 +23,7 @@ Use the safest path in this order:
 
 Do not rely on login-gated access or anti-bot bypassing.
 
-## OLX Adapter Contract
+## Adapter Contract (Bronze)
 
 Each parsed listing should preserve:
 
@@ -55,4 +55,4 @@ When uncertain, keep `unknown` and preserve raw evidence in payload fields.
 ## Dedup/SCD Policy
 
 - Bronze: append everything, no dedup, no SCD.
-- Silver: dedup and SCD logic (`is_current`, `valid_from`, `valid_to`).
+- Silver: dedup and SCD logic (`is_current`, `valid_from`, `valid_to`). Initial implementation is focused on Price, Area, and Rooms changes.
