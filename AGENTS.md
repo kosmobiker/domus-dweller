@@ -13,8 +13,9 @@ Execution checklist: [docs/agent-todos.md](/home/user/domus-dweller/docs/agent-t
 - Geography for v1 is Krakow plus an approximate 30 km radius.
 - Daily ingestion is the default cadence for v1.
 - Seller classification is mandatory: every listing should be labeled at least as `private`, `professional`, or `unknown`.
-- Current active source is OLX only; keep other sources deferred until OLX flow is stable.
+- Current active source is OLX only; Otodom remains deferred until OLX flow is fully stable and Silver sync is robust.
 - Bronze storage target is MotherDuck (DuckDB) Bronze tables (`bronze.rent_bronze`, `bronze.sale_bronze`).
+- Silver storage target is MotherDuck (DuckDB) Silver tables (`silver.listing_identity`, `silver.listing_versions`).
 - Do not require Neon environment variables for current bootstrap/ingest flows.
 - Keep ingestion parse-only from search pages for now; detail-page enrichment is disabled in runtime flow.
 - Prefer TDD: write or update failing tests before implementing parser, normalization, or schema behavior.

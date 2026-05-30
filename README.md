@@ -25,7 +25,7 @@ The goal is to collect flat and house listings over time, normalize them into a 
 - Silver: cleaning, canonicalization, deduplication, and SCD via **dbt** (`is_current`, `valid_from`, `valid_to`).
 - Gold: aggregated, analytics-ready datasets for notebooks and the future app.
 
--## Proposed Stack
+## Stack
 
 - Data pipeline: Python
 - Transformation: DuckDB/MotherDuck SQL scripts + notebooks
@@ -33,7 +33,7 @@ The goal is to collect flat and house listings over time, normalize them into a 
 - Environment and dependency manager: `uv`
 - Linting and formatting: `ruff`
 - Local parse artifacts: JSON under `data/parsed/` (used by parse job and sink job)
-- Jobs: GitHub Actions scheduled workflows (Ingestion + Sink + dbt build)
+- Jobs: GitHub Actions scheduled workflows (Ingestion + Sink + Silver Sync)
 - Notebook analysis: Jupyter + SQL/Pandas
 - Geospatial indexing: H3 via Python `h3`
 - Maps later: MapLibre + OpenStreetMap tiles
@@ -55,14 +55,14 @@ The goal is to collect flat and house listings over time, normalize them into a 
 - [docs/testing.md](/home/user/domus-dweller/docs/testing.md)
 - [docs/open-questions.md](/home/user/domus-dweller/docs/open-questions.md)
 
-## Proposed Repo Shape
+## Repo Shape
 
 ```text
 ingestion/      Python scraping and normalization pipeline
 notebooks/      Jupyter analysis
 sql/            schema, migrations, and analysis queries
 apps/
-  web/          Next.js app on Vercel
+  web/          Next.js app on Vercel (Placeholder)
 packages/
   analytics/    optional shared analytics code for later app work
   db/           optional app-side database access helpers

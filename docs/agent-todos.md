@@ -1,6 +1,6 @@
 # Agent To-Dos
 
-Current objective: stabilize OLX daily ingestion into MotherDuck Bronze, then start Silver.
+Current objective: finalize Silver SCD Type 2 logic and start Gold/Analytics.
 
 ## Current Baseline
 
@@ -8,19 +8,21 @@ Current objective: stabilize OLX daily ingestion into MotherDuck Bronze, then st
 - Geography: Krakow + nearby municipalities (~30 km).
 - Modes: `rent`, `sale`.
 - Bronze policy: append-only, no dedup, no SCD.
-- Warehouse: MotherDuck (DuckDB) Bronze flow.
-- Scheduler: GitHub Actions (`parse` job + `sink` job).
+- Silver policy: SCD Type 2 with `change_hash` on core fields.
+- Warehouse: MotherDuck (DuckDB).
+- Scheduler: GitHub Actions (`parse` job + `sink` job + `silver-sync` job).
 
 ## Immediate Backlog (Next 2-3 Days)
 
-1. Validate daily pipeline stability.
-- [ ] Run workflow manually once with `pages=10` and verify both jobs succeed.
-- [ ] Confirm Bronze table row growth after each run.
-- [ ] Confirm retry behavior in sink job by reviewing workflow logs.
+1. Silver Sync Hardening.
+- [x] Implement initial `silver-sync` in Python/SQL.
+- [ ] Add tests for `is_current` and version-window behavior.
+- [ ] Monitor Silver growth and versioning accuracy.
+- [ ] Add listing identity cleanup (handling deleted listings).
 
 2. Data quality hardening.
-- [ ] Expand extraction from `detail_params` into normalized typed fields.
-- [ ] Add normalization for high-value OLX params per mode (rent vs sale).
+- [x] Expand extraction from `detail_params` into normalized typed fields.
+- [x] Add normalization for high-value OLX params per mode (rent vs sale).
 - [ ] Add parser regression fixtures for known noisy `detail_params` keys.
 
 3. Observability.
@@ -28,25 +30,24 @@ Current objective: stabilize OLX daily ingestion into MotherDuck Bronze, then st
 - [ ] Record parse count vs sink count to detect data loss.
 - [ ] Add simple null-rate report notebook for key columns.
 
-## Silver Preparation Backlog
+## Gold / Analytics Backlog
 
-- [ ] Define Silver table contracts for:
-  - listing identity
-  - listing versions (SCD2)
-  - current listing view
-- [ ] Define `change_hash` payload contract (which fields are versioned).
-- [ ] Add first Silver transform prototype (SQL or dbt later).
-- [ ] Add tests for `is_current` and version-window behavior.
+- [ ] Define Gold table contracts for:
+  - Daily H3 aggregates
+  - Area-level trends
+- [ ] Implement initial Gold transformation scripts.
+- [ ] Create basic Jupyter notebook for rent/sale trend analysis.
 
 ## Source Expansion (Later)
 
-- [ ] Re-introduce second source after OLX stability window is complete.
+- [ ] Re-introduce second source after Silver flow is robust.
 - [ ] Keep adapter interface source-isolated.
 - [ ] Reuse Bronze contract and sink path for new sources.
 
-## Definition Of Done For Current Sprint
+## Definition Of Done For Current Phase
 
-- [ ] At least 3 consecutive daily OLX runs complete in GitHub Actions.
-- [ ] `rent_bronze` and `sale_bronze` both receive rows every day.
-- [ ] Core parser and sink tests are green.
-- [ ] Documentation is consistent with OLX + MotherDuck Bronze-first flow.
+- [x] At least 3 consecutive daily OLX runs complete in GitHub Actions.
+- [x] `rent_bronze` and `sale_bronze` both receive rows every day.
+- [x] Core parser and sink tests are green.
+- [x] Silver Sync merges Bronze observations into Identity and Version tables.
+- [x] Documentation is consistent with OLX + MotherDuck Bronze/Silver flow.

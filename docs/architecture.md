@@ -12,20 +12,20 @@ Build a personal housing analytics platform for Krakow and nearby suburbs with:
 - low operational overhead
 - zero recurring infrastructure spend
 
-## Recommended Stack By Phase
+## Stack By Phase
 
 ### Phase 1: Ingestion And Storage
 
 - Language: Python
-- Phase-1 storage: local JSON and CSV snapshots under `data/`
-- Optional local analysis engine: DuckDB over those files
+- Storage: MotherDuck (DuckDB) for Bronze and Silver layers.
+- Local artifacts: JSON snapshots under `data/parsed/`
 - Scheduled jobs: GitHub Actions cron
-- Scraping libs: `httpx` or `requests`, `selectolax` or `beautifulsoup4`
-- Data access: SQL-first, `psycopg`, optional SQLAlchemy Core
+- Scraping libs: `httpx`, `selectolax`
+- Data access: SQL-first via DuckDB Python API
 - Geospatial index: Python `h3`
 - Analysis: Jupyter + SQL + Pandas
 
-### Phase 2: Lightweight Product UI
+### Phase 2: Lightweight Product UI (Planned)
 
 - App framework: Next.js with TypeScript
 - Deployment: Vercel free tier
@@ -47,12 +47,14 @@ Each source adapter is isolated and returns a common intermediate object.
 ### 2. Bronze Layer (Append-Only Facts)
 
 This layer persists parsed facts exactly as observed. Orchestrated via GitHub Actions and the `sink` job.
+- **Engine:** MotherDuck.
+- **Tables:** `bronze.rent_bronze`, `bronze.sale_bronze`.
 
 ### 3. Silver Layer (Clean + Dedup + SCD)
 
 This layer converts Bronze facts into curated listing history.
 - **Engine:** MotherDuck SQL / Scripting.
-- **Orchestration:** GitHub Actions `sink` job followed by transformation steps.
+- **Orchestration:** GitHub Actions `sink` job followed by `silver-sync` job.
 - **Identity:** Listings are tracked by `source` + `source_listing_id`.
 
 Responsibilities:
@@ -149,7 +151,13 @@ This avoids paying for geocoding while still making suburb filtering useful.
 
 GitHub Actions should run on a UTC schedule.
 
-Recommended flow:
+Current flow:
+
+1. `daily-olx-parse`: Scrapes OLX to local JSON artifacts.
+2. `daily-olx-sink-motherduck`: Loads JSON artifacts to MotherDuck Bronze.
+3. `silver-sync`: Merges Bronze into Silver (SCD Type 2).
+
+Planned future flow:
 
 1. `scrape-source-to-bronze` matrix job per source
 2. `build-silver-history`
@@ -176,7 +184,7 @@ Before the web app exists, the system should already support:
 - municipality and district comparisons
 - listing-level price history inspection
 
-## Website Shape
+## Website Shape (Planned)
 
 The site should stay lightweight and mostly read precomputed data.
 
@@ -221,13 +229,13 @@ Treat sources in tiers.
 
 Public pages with stable HTML or embedded JSON and no login barrier.
 
-Start here first.
+Start here first. OLX is Tier 1.
 
 ### Tier 2
 
 Pages needing more browser automation or stronger anti-bot handling.
 
-Add only after Tier 1 works reliably.
+Add only after Tier 1 works reliably. Otodom is Tier 2.
 
 ### Tier 3
 
@@ -235,16 +243,16 @@ Login-gated, auth-heavy, or highly brittle sources.
 
 Do not put these in v1. Facebook Marketplace most likely belongs here.
 
-## Suggested v1 Scope
+## v1 Scope
 
-The smallest serious version is:
+Current status:
 
 - Krakow plus approximately 30 km radius
 - rent and sale
 - flats and houses
-- one or two sources first
-- daily updates
-- notebook-first analytics
-- listing and area history
+- OLX integrated (Bronze + Silver)
+- daily updates active via GHA
+- notebook-first analytics in progress
+- listing and area history in Silver
 
 Commercial real estate stays out of scope for v1.
