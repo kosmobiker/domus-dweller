@@ -1,18 +1,22 @@
 import os
 
 import duckdb
+from dotenv import load_dotenv
 
 
 def bootstrap_motherduck(*, database: str = "my_db", token: str | None = None) -> None:
     """
-    Bootstrap MotherDuck with Bronze (Raw) schema and tables.
+    Bootstrap MotherDuck or Local DuckDB with Bronze (Raw) schema and tables.
     """
+    load_dotenv()
     token = token or os.getenv("MOTHERDUCK_TOKEN")
-    if not token:
-        raise ValueError("MOTHERDUCK_TOKEN environment variable is not set.")
 
-    # Connect to MotherDuck
-    con = duckdb.connect(f"md:{database}?token={token}")
+    if not token or token.lower() == "local":
+        print(f"Connecting to local DuckDB file: {database}")
+        con = duckdb.connect(database)
+    else:
+        print(f"Connecting to MotherDuck database: {database}")
+        con = duckdb.connect(f"md:{database}?token={token}")
 
     print(f"Connected to MotherDuck database: {database}")
 

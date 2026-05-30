@@ -97,3 +97,30 @@ jobs:
 
       - name: Sink to MotherDuck (with retries)
         run: make daily-olx-sink-motherduck DATE=${{ needs.parse.outputs.run_date }} MD_DATABASE=${{ env.MD_DATABASE }}
+
+  silver:
+    runs-on: ubuntu-latest
+    needs: [parse, sink]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Bootstrap Silver schemas
+        run: make silver-bootstrap MD_DATABASE=${{ env.MD_DATABASE }}
+
+      - name: Sync to Silver
+        run: make silver-sync MD_DATABASE=${{ env.MD_DATABASE }}
+
+      - name: Verify Silver Integrity
+        run: make verify MD_DATABASE=${{ env.MD_DATABASE }}
