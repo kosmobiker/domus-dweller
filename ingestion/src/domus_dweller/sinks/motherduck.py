@@ -84,9 +84,9 @@ def load_rows_to_motherduck(
     if mode not in {"rent", "sale"}:
         raise ValueError(f"`mode` must be `rent` or `sale`, got: {mode}")
 
+    from dotenv import load_dotenv
+    load_dotenv()
     token = token or os.getenv("MOTHERDUCK_TOKEN")
-    if not token:
-        raise ValueError("MOTHERDUCK_TOKEN environment variable is not set.")
 
     effective_snapshot_date = snapshot_date or date.today()
     effective_ingested_at = ingested_at or datetime.now(UTC)
@@ -103,8 +103,11 @@ def load_rows_to_motherduck(
 
     import pyarrow as pa
 
-    # Connect to MotherDuck
-    con = duckdb.connect(f"md:{database}?token={token}")
+    # Connect to MotherDuck or Local File
+    if not token or token.lower() == "local":
+        con = duckdb.connect(database)
+    else:
+        con = duckdb.connect(f"md:{database}?token={token}")
 
     table_name = f"bronze.{mode}_bronze"
 
