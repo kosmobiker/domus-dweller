@@ -15,10 +15,10 @@ Current objective: finalize Silver SCD Type 2 logic and start Gold/Analytics.
 ## Immediate Backlog (Next 2-3 Days)
 
 1. Silver Sync Hardening.
-- [x] Implement initial `silver-sync` in Python/SQL.
-- [ ] Add tests for `is_current` and version-window behavior.
-- [ ] Monitor Silver growth and versioning accuracy.
-- [ ] Add listing identity cleanup (handling deleted listings).
+- [x] Implement initial silver-sync using dbt-core and DuckDB.
+- [x] Add functional tests for dbt SCD Type 2 version-window behavior.
+- [x] Monitor Silver growth and versioning accuracy via dbt tests.
+- [x] Add listing identity handling via dbt incremental window functions.
 
 2. Data quality hardening.
 - [x] Expand extraction from `detail_params` into normalized typed fields.

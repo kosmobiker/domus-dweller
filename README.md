@@ -28,7 +28,7 @@ The goal is to collect flat and house listings over time, normalize them into a 
 ## Stack
 
 - Data pipeline: Python
-- Transformation: DuckDB/MotherDuck SQL scripts + notebooks
+- Transformation: dbt-core + DuckDB/MotherDuck SQL + notebooks
 - Python version: 3.13
 - Environment and dependency manager: `uv`
 - Linting and formatting: `ruff`
@@ -42,7 +42,7 @@ The goal is to collect flat and house listings over time, normalize them into a 
 ## Repo Docs
 
 - [AGENTS.md](/home/user/domus-dweller/AGENTS.md)
-- [SKILLS.md](/home/user/domus-dweller/SKILLS.md)
+
 - [docs/agent-todos.md](/home/user/domus-dweller/docs/agent-todos.md)
 - [docs/architecture.md](/home/user/domus-dweller/docs/architecture.md)
 - [docs/collection-policy.md](/home/user/domus-dweller/docs/collection-policy.md)
@@ -59,6 +59,7 @@ The goal is to collect flat and house listings over time, normalize them into a 
 
 ```text
 ingestion/      Python scraping and normalization pipeline
+transform/      dbt-core project (Silver/Gold layers, SCD snapshots, data tests)
 notebooks/      Jupyter analysis
 sql/            schema, migrations, and analysis queries
 apps/
@@ -75,13 +76,12 @@ docs/           architecture and planning
 ## Local Tooling
 
 ```bash
-uv sync --group dev
-uv run ruff check .
-uv run ruff format .
-uv run pytest
+make lint
+make test
+make data
 ```
 
-Always run `make ci` before pushing, it runs the lint and test matrix to mirror CI expectations.
+Always run `make verify` before pushing, it runs the lint and test matrix to mirror CI expectations.
 
 ## Runbook
 

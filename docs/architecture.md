@@ -53,9 +53,9 @@ This layer persists parsed facts exactly as observed. Orchestrated via GitHub Ac
 ### 3. Silver Layer (Clean + Dedup + SCD)
 
 This layer converts Bronze facts into curated listing history.
-- **Engine:** MotherDuck SQL / Scripting.
-- **Orchestration:** GitHub Actions `sink` job followed by `silver-sync` job.
-- **Identity:** Listings are tracked by `source` + `source_listing_id`.
+- **Engine:** `dbt-core` with MotherDuck SQL.
+- **Orchestration:** GitHub Actions `sink` job followed by `silver` job.
+- **Identity:** Listings are tracked by `source` + `source_listing_id` + `mode`.
 
 Responsibilities:
 
@@ -65,9 +65,8 @@ Responsibilities:
 - normalize room and area values
 - reject obviously broken records
 - deduplicate repeated observations
-- compute stable `change_hash`
-- maintain SCD Type 2 history (`valid_from`, `valid_to`, `is_current`)
-- maintain listing identity state (`first_seen`, `last_seen`, `is_active`)
+- maintain SCD Type 2 history (`dbt_valid_from`, `dbt_valid_to`) natively via `dbt snapshot`
+- maintain listing identity state (`first_seen_at`, `last_seen_at`, `is_active`) via `dbt` incremental models
 
 ### 4. Gold Layer (Read-Optimized Analytics)
 

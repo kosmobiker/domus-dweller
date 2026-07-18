@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "skills": {
+    "data-visualization": {
+      "source": "anthropics/knowledge-work-plugins",
+      "sourceType": "github",
+      "skillPath": "data/skills/data-visualization/SKILL.md",
+      "computedHash": "64055493de5ff4afed716cc871018cf6e020338b76d3e7ed5c2985707cb43cec"
+    },
+    "dbt-transformation-patterns": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "skillPath": "plugins/data-engineering/skills/dbt-transformation-patterns/SKILL.md",
+      "computedHash": "7c726cca289a2319729a64d6ab31c6f193602f225c43b8ace6c8b5cc45837f69"
+    },
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "skillPath": "skills/find-skills/SKILL.md",
+      "computedHash": "781bd6d3f9b19f8c9af6b53d8d0e4876d0183841b565db34ca7092ffa412d111"
+    },
+    "motherduck-duckdb-sql": {
+      "source": "motherduckdb/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/motherduck-duckdb-sql/SKILL.md",
+      "computedHash": "6eb088190d6ec32d4ce7f73ea17af63b2e128d281d6400f2b6f4cee82f5acf33"
+    }
+  }
+}
