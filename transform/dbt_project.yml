@@ -1,0 +1,15 @@
+name: 'domus_dweller'
+version: '1.0.0'
+config-version: 2
+profile: 'domus_dweller'
+model-paths: ["models"]
+snapshot-paths: ["snapshots"]
+test-paths: ["tests"]
+clean-targets: ["target", "dbt_packages"]
+models:
+  domus_dweller:
+    staging:
+      +materialized: view
+    silver:
+      +schema: silver
+      +materialized: table

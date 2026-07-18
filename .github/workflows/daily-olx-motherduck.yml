@@ -116,11 +116,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev
 
-      - name: Bootstrap Silver schemas
-        run: make silver-bootstrap MD_DATABASE=${{ env.MD_DATABASE }}
-
       - name: Sync to Silver
         run: make silver-sync MD_DATABASE=${{ env.MD_DATABASE }}
 
       - name: Verify Silver Integrity
-        run: make verify MD_DATABASE=${{ env.MD_DATABASE }}
+        run: cd transform && uv run dbt test --target prod

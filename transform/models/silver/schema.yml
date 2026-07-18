@@ -1,0 +1,26 @@
+version: 2
+
+models:
+  - name: listing_identity
+    columns:
+      - name: source_listing_id
+        tests:
+          - not_null
+      - name: source
+        tests:
+          - not_null
+      - name: mode
+        tests:
+          - not_null
+
+  - name: listing_current
+    columns:
+      - name: source_listing_id
+        tests:
+          - not_null
+      - name: title
+        tests:
+          - not_null
+      - name: price_total
+        tests:
+          - not_null

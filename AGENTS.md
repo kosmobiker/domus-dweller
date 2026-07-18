@@ -49,11 +49,12 @@ Owns source adapters:
 
 ### 3. Data Agent
 
-Owns the database model:
+Owns the database model and dbt project:
 
 - normalized listing schema
-- historical observation model
-- aggregations
+- historical observation model (dbt snapshots)
+- aggregations and incremental models
+- dbt tests for data integrity (unique, not_null, etc.)
 - deduplication rules
 - migrations
 
@@ -112,4 +113,75 @@ A source is not considered integrated until all of the following exist:
 - Prefer simple HTTP fetching plus HTML parsing before browser automation.
 - Prefer application-side H3 computation before database GIS extensions.
 - Prefer daily batch analytics before near-real-time updates.
-- Prefer explicit SQL or query builders for analytics over heavy ORMs.
+- Prefer explicit SQL and `dbt-core` for transformations and analytics over heavy ORMs.
+
+## Implementation Guidelines
+
+### Source Adapter Design
+
+When adding a source:
+
+- define the search URLs or discovery entrypoints
+- identify stable listing identifiers
+- capture the minimum raw payload needed for debugging
+- extract seller classification and preserve source evidence for it
+- map to the canonical schema
+- tag unsupported fields instead of guessing
+- write a parser fixture before broad crawling
+- for current OLX flow, prioritize robust search-page extraction over fragile detail-page scraping
+
+### Historical Modeling
+
+When persisting observations:
+
+- keep immutable observations separate from current listing state
+- store `observed_at`, `first_seen_at`, and `last_seen_at`
+- keep both total price and normalized price per square meter
+- use dbt snapshot for SCD Type 2 logic instead of custom Python scripts
+- treat disappearance as a state change, not a delete
+
+### Geo Skill
+
+When working with maps:
+
+- store latitude and longitude in the canonical listing record
+- compute H3 cell ids in the Python pipeline first
+- aggregate daily metrics by cell and listing type
+- use different H3 resolutions for zoomed-out and zoomed-in views
+
+### Analytics Skill
+
+Use the `dbt-transformation-patterns` skill when building analytics pipelines.
+
+Start with robust metrics:
+
+- median price
+- median price per square meter
+- listing count
+- new listings
+- removed listings
+- days on market
+- price change frequency
+
+Avoid starting with fragile composite scores before the base metrics are trustworthy.
+
+### AI Skill
+
+Use "AI" only where it adds leverage:
+
+- amenity extraction from Polish listing descriptions
+- duplicate detection across portals
+- outlier explanation
+- natural-language search over saved analytics summaries
+
+Default to rule-based or statistical methods first. Only add models after the baseline pipeline is reliable.
+
+### Zero-Cost Skill
+
+Before adding any dependency or service:
+
+- check whether MotherDuck (DuckDB) and Vercel free tier are enough
+- prefer GitHub Actions scheduled jobs over always-on workers
+- avoid storage-heavy raw HTML retention if compact JSON is enough
+- avoid paid geocoding and paid map tiles
+- favor notebook-first analysis before building product UI

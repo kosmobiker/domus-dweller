@@ -9,9 +9,6 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    env:
-      MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
-      MD_DATABASE: my_db
 
     steps:
       - name: Checkout

@@ -37,29 +37,29 @@ Bronze rules:
 - `is_active`
 - `inactive_at`
 
-#### `silver_listing_versions` (SCD Type 2)
+#### `silver_listing_versions` (dbt snapshot / SCD Type 2)
 
 - `source`
 - `source_listing_id`
-- `valid_from`
-- `valid_to`
-- `is_current`
-- `change_hash`
-- `normalized_json`
+- `dbt_valid_from`
+- `dbt_valid_to`
+- `dbt_scd_id`
+- `dbt_updated_at`
 
-#### `silver_listing_current` (view/table)
+#### `silver_listing_current` (dbt table model)
 
-- one current row per `(source, source_listing_id)`
-- derived from `silver_listing_versions is_current = true`
+- one current row per `(source, source_listing_id, mode)`
+- derived from `silver_listing_versions where dbt_valid_to is null`
 
 Silver rules:
 
-- primary key on `silver_listing_identity(source, source_listing_id)`
-- only one current row per listing id should exist in `silver_listing_versions`
-- append a new `silver_listing_versions` row only when `change_hash` changes
-- unchanged Bronze observations must not create new Silver SCD rows
-- update `silver_listing_identity.last_seen_at` on every successful full snapshot
-- mark `silver_listing_identity.is_active = false` when listing disappears from a full snapshot
+- generated and managed entirely by `dbt-core` (`dbt run` and `dbt snapshot`).
+- primary key on `silver_listing_identity(source, source_listing_id, mode)`
+- only one current row per listing id should exist in `silver_listing_versions` (`dbt_valid_to is null`)
+- append a new `silver_listing_versions` row only when tracked columns change (handled natively by `dbt snapshot`)
+- unchanged Bronze observations are ignored via dbt's built-in snapshot checks
+- update `silver_listing_identity.last_seen_at` via incremental dbt models
+- `silver_listing_identity.is_active` inferred via window functions inside the pipeline
 
 ### Gold Layer
 

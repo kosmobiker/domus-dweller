@@ -1,11 +1,10 @@
-.PHONY: lint test ci verify daily-olx-rent daily-olx-sale daily-olx daily-olx-parse daily-olx-sink-motherduck show-data motherduck-bootstrap silver-bootstrap silver-sync daily-olx-motherduck-rent daily-olx-motherduck-sale daily-olx-motherduck dev-db-setup dev-silver-sync
+.PHONY: lint test data verify daily-olx-rent daily-olx-sale daily-olx daily-olx-parse daily-olx-sink-motherduck motherduck-bootstrap silver-sync
 
 COV_MIN := 70
 UA := Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36
 OLX_BASE_URL := https://www.olx.pl/nieruchomosci
 FETCH_FLAGS := --fail --silent --show-error --location --retry 3 --retry-delay 2 --connect-timeout 10 --max-time 45
 MD_DATABASE ?= my_db
-DEV_DB := data/dev.duckdb
 # Approximate 30 km coverage around Krakow, configurable per run:
 # make daily-olx CITIES="krakow wieliczka skawina"
 CITIES ?= krakow wieliczka skawina niepolomice zabierzow zielonki swiatniki-gorne
@@ -22,7 +21,8 @@ lint:
 test:
 	uv run pytest --cov=domus_dweller --cov-report=term-missing --cov-fail-under=$(COV_MIN)
 
-ci: lint test
+data:
+	cd transform && uv run dbt test --target prod
 
 verify: lint test
 
@@ -91,30 +91,8 @@ daily-olx-sink-motherduck:
 		attempt=$$((attempt + 1)); \
 	done
 
-show-data:
-	find data -maxdepth 4 -type f | sort
-
 motherduck-bootstrap:
 	uv run python -m domus_dweller.sinks.motherduck_bootstrap --database "$(MD_DATABASE)"
 
-silver-bootstrap:
-	uv run python -m domus_dweller.sinks.motherduck_silver_bootstrap --database "$(MD_DATABASE)"
-
 silver-sync:
-	uv run python -m domus_dweller.sinks.motherduck_silver_sync --database "$(MD_DATABASE)"
-
-daily-olx-motherduck-rent:
-	uv run python -m domus_dweller.sources.olx.ingest_motherduck --mode rent --database "$(MD_DATABASE)" --pages $(PAGES) --cities $(CITIES) --property-types-rent $(PROPERTY_TYPES_RENT)
-
-daily-olx-motherduck-sale:
-	uv run python -m domus_dweller.sources.olx.ingest_motherduck --mode sale --database "$(MD_DATABASE)" --pages $(PAGES) --cities $(CITIES) --property-types-sale $(PROPERTY_TYPES_SALE)
-
-daily-olx-motherduck: daily-olx-motherduck-rent daily-olx-motherduck-sale silver-sync
-
-dev-db-setup:
-	@mkdir -p data
-	MOTHERDUCK_TOKEN=local uv run python -m domus_dweller.sinks.motherduck_bootstrap --database "$(DEV_DB)"
-	MOTHERDUCK_TOKEN=local uv run python -m domus_dweller.sinks.motherduck_silver_bootstrap --database "$(DEV_DB)"
-
-dev-silver-sync:
-	MOTHERDUCK_TOKEN=local uv run python -m domus_dweller.sinks.motherduck_silver_sync --database "$(DEV_DB)"
+	cd transform && uv run dbt deps && uv run dbt build --target prod
