@@ -1,6 +1,6 @@
 # Agent To-Dos
 
-Current objective: finalize Silver SCD Type 2 logic and start Gold/Analytics.
+Current objective: start Gold/Analytics.
 
 ## Current Baseline
 
@@ -23,7 +23,9 @@ Current objective: finalize Silver SCD Type 2 logic and start Gold/Analytics.
 2. Data quality hardening.
 - [x] Expand extraction from `detail_params` into normalized typed fields.
 - [x] Add normalization for high-value OLX params per mode (rent vs sale).
-- [ ] Add parser regression fixtures for known noisy `detail_params` keys.
+- [x] Add parser regression fixtures for known noisy `detail_params` keys.
+- [x] **Urgent:** Fix parser coverage for `area_sqm`, `rooms`, `floor`, and `price_per_sqm` (Solved via Hybrid Regex + LLM fallback architecture).
+- [ ] Implement outlier rejection in Silver (e.g., total price < 100 PLN, > 10M PLN).
 
 3. Observability.
 - [ ] Add run summary in GitHub Actions with counts by mode.

@@ -1,70 +1,78 @@
 # Schema V1
 
-## Core Tables (Local Phase 1)
+## Core Tables
 
 ### Bronze Layer
 
-#### `bronze_listing_observations` (append only)
+#### `bronze.rent_bronze` & `bronze.sale_bronze` (append only)
+These tables store the parsed listing data as extracted from the source platforms.
 
-- `ingest_run_id`
-- `observed_at`
-- `source`
+- `source` (e.g., 'olx')
 - `source_listing_id`
 - `source_url`
-- `raw_payload`
-- `normalized_json`
+- `mode` ('rent' or 'sale')
+- `snapshot_date`
+- `layer`
+- `ingested_at`
 - `payload_hash`
-- `seller_evidence`
+- `raw_json` (contains the full JSON structure including `detail_params`)
 
 Bronze rules:
-
 - insert only, no updates or deletes in normal flow
 - do not deduplicate in ingestion code
 - every parsed row is a fact row for auditability
-- keep source-mode tracks explicit (`mode = rent|sale`) in Bronze rows
-- keep both:
-  - `detail_params` as the full raw parameter map
-  - `detail_params_common` plus mode-specific maps (`detail_params_rent` / `detail_params_sale`)
+- rent and sale are split into separate tables natively
+- keep the full raw parameter map in `raw_json`
 
 ### Silver Layer
 
-#### `silver_listing_identity`
+Generated and managed entirely by `dbt-core` (`dbt run` and `dbt snapshot`). Primary keys generally involve `(source, source_listing_id, mode)`.
+
+#### `silver.listing_identity`
+Tracks the active lifecycle of unique listings.
 
 - `source`
 - `source_listing_id`
+- `mode`
 - `first_seen_at`
 - `last_seen_at`
-- `is_active`
-- `inactive_at`
 
-#### `silver_listing_versions` (dbt snapshot / SCD Type 2)
+#### `silver.listing_versions` (dbt snapshot / SCD Type 2)
+Tracks historical changes to core attributes over time.
 
+- `dbt_scd_id`
 - `source`
 - `source_listing_id`
+- `mode`
+- `title`
+- `price_total`
+- `price_per_sqm`
+- `area_sqm`
+- `rooms`
+- `floor`
+- `city`
+- `district`
+- `seller_segment`
 - `dbt_valid_from`
 - `dbt_valid_to`
-- `dbt_scd_id`
 - `dbt_updated_at`
 
-#### `silver_listing_current` (dbt table model)
+#### `silver.listing_current`
+The latest state of all tracked listings.
 
 - one current row per `(source, source_listing_id, mode)`
-- derived from `silver_listing_versions where dbt_valid_to is null`
+- derived from `silver.listing_versions` where `dbt_valid_to is null`
+- contains all current structural, location, and pricing fields (e.g., `price_total`, `price_per_sqm`, `area_sqm`, `rooms`, `city`, `district`)
 
 Silver rules:
-
-- generated and managed entirely by `dbt-core` (`dbt run` and `dbt snapshot`).
-- primary key on `silver_listing_identity(source, source_listing_id, mode)`
-- only one current row per listing id should exist in `silver_listing_versions` (`dbt_valid_to is null`)
-- append a new `silver_listing_versions` row only when tracked columns change (handled natively by `dbt snapshot`)
+- only one current row per listing id should exist in `silver.listing_versions` (`dbt_valid_to is null`)
+- append a new `silver.listing_versions` row only when tracked columns change (handled natively by `dbt snapshot`)
 - unchanged Bronze observations are ignored via dbt's built-in snapshot checks
-- update `silver_listing_identity.last_seen_at` via incremental dbt models
-- `silver_listing_identity.is_active` inferred via window functions inside the pipeline
+- update `listing_identity.last_seen_at` via incremental dbt models
 
 ### Gold Layer
 
-#### `gold_h3_daily_metrics`
-
+#### `gold_h3_daily_metrics` (Planned)
 - date
 - H3 resolution and cell id
 - listing counts
@@ -72,12 +80,9 @@ Silver rules:
 - split dimensions (`rent/sale`, `flat/house`, `seller_segment`)
 
 ## Modeling Notes
-
 - Bronze is the raw historical source of truth
 - Silver is the curated listing-history source of truth
 - Gold is read-optimized and should be rebuildable from Silver
-- store compact normalized payload JSON, not full page dumps
-- keep `listing_type` as `rent` or `sale`
-- keep `property_type` as `flat` or `house` in v1
+- store compact normalized payload JSON in Bronze, not full HTML page dumps
 - `seller_segment` should be `private`, `professional`, or `unknown`
-- `seller_type` should preserve finer detail such as `agency`, `developer`, `private`, or `unknown`
+- unnormalized raw keys (like Polish `powierzchnia` or `liczba pokoi`) remain in `raw_json` until they are formally extracted into Silver

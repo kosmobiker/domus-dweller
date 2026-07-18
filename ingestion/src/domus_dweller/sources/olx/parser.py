@@ -27,9 +27,11 @@ def _seller_type_from_text(seller_text: str) -> str:
 def parse_search_results(raw_html: str) -> list[dict]:
     tree = HTMLParser(raw_html)
     page_city = _extract_page_city(tree)
+    prerendered_state = _parse_prerendered_state(tree)
     card_listings = _parse_card_listings(tree)
     jsonld_listings = _parse_jsonld_offers(tree, page_city=page_city)
-    return _merge_card_and_jsonld(card_listings, jsonld_listings)
+    merged = _merge_card_and_jsonld(card_listings, jsonld_listings)
+    return _merge_with_prerendered(merged, prerendered_state)
 
 
 def parse_detail_page(raw_html: str) -> dict:
@@ -104,14 +106,22 @@ def _parse_card_listings(tree: HTMLParser) -> list[dict]:
         ).strip()
         price_total, currency = _extract_price_fields(seller_text)
 
+        area_sqm = _extract_area_sqm(seller_text)
+        rooms = _extract_rooms_from_text(seller_text)
+        price_per_sqm_source = _extract_price_per_sqm(seller_text)
+
         listings.append(
             {
                 "source": "olx",
                 "source_listing_id": source_listing_id,
                 "source_url": source_url,
                 "title": title,
+                "description": seller_text, # Added for LLM
                 "price_total": price_total,
+                "price_per_sqm_source": price_per_sqm_source,
                 "currency": currency,
+                "area_sqm": area_sqm,
+                "rooms": rooms,
                 "district": None,
                 "city": None,
                 "municipality": None,
@@ -168,14 +178,22 @@ def _parse_jsonld_offers(tree: HTMLParser, *, page_city: str | None) -> list[dic
             location_approx = _build_location_approx(city=page_city, district=district)
             images = _extract_images(offer.get("image"))
             price_valid_until = str(offer.get("priceValidUntil", "")).strip() or None
+            area_sqm = _extract_area_sqm(evidence)
+            rooms = _extract_rooms_from_text(evidence)
+            price_per_sqm_source = _extract_price_per_sqm(evidence)
+
             listings.append(
                 {
                     "source": "olx",
                     "source_listing_id": source_listing_id,
                     "source_url": source_url,
                     "title": str(offer.get("name", "")).strip(),
+                    "description": str(offer.get("description", "")).strip(), # Added for LLM
                     "price_total": price_total,
+                    "price_per_sqm_source": price_per_sqm_source,
                     "currency": price_currency,
+                    "area_sqm": area_sqm,
+                    "rooms": rooms,
                     "district": district,
                     "city": page_city,
                     "municipality": page_city,
@@ -512,8 +530,14 @@ def _merge_card_and_jsonld(card_listings: list[dict], jsonld_listings: list[dict
         if listing_id in by_id:
             jsonld = by_id[listing_id]
             enriched["title"] = jsonld.get("title") or enriched.get("title")
+            enriched["description"] = jsonld.get("description") or enriched.get("description")
             enriched["price_total"] = jsonld.get("price_total") or enriched.get("price_total")
+            enriched["price_per_sqm_source"] = (
+                jsonld.get("price_per_sqm_source") or enriched.get("price_per_sqm_source")
+            )
             enriched["currency"] = jsonld.get("currency") or enriched.get("currency")
+            enriched["area_sqm"] = jsonld.get("area_sqm") or enriched.get("area_sqm")
+            enriched["rooms"] = jsonld.get("rooms") or enriched.get("rooms")
             enriched["district"] = jsonld.get("district")
             enriched["city"] = jsonld.get("city")
             enriched["municipality"] = jsonld.get("municipality")
@@ -528,4 +552,65 @@ def _merge_card_and_jsonld(card_listings: list[dict], jsonld_listings: list[dict
             seen.add(listing_id)
             merged.append(item)
 
+    return merged
+
+def _parse_prerendered_state(tree: HTMLParser) -> dict[str, dict]:
+    for script in tree.css("script"):
+        text = script.text()
+        if text and "__PRERENDERED_STATE__" in text:
+            match = re.search(r'__PRERENDERED_STATE__\s*=\s*"(.*?)";', text)
+            if match:
+                try:
+                    raw_state = match.group(1).encode("utf-8").decode("unicode_escape")
+                    state = json.loads(raw_state)
+                    ads = state.get("listing", {}).get("listing", {}).get("ads", [])
+                    prerendered_data = {}
+                    for ad in ads:
+                        ad_id = str(ad.get("id"))
+                        if not ad_id:
+                            continue
+                        olx_id = f"olx-{ad_id}"
+                        
+                        params_raw = ad.get("params", [])
+                        params_dict = {}
+                        for p in params_raw:
+                            if "name" in p and "value" in p:
+                                params_dict[p["name"].casefold()] = str(p["value"]).strip()
+                                
+                        desc = ad.get("description", "").replace("<br />", "\n").strip()
+                        title = ad.get("title", "").strip()
+                        
+                        prerendered_data[olx_id] = {
+                            "detail_params": params_dict,
+                            "description": desc,
+                            "title": title
+                        }
+                    return prerendered_data
+                except Exception:
+                    pass
+    return {}
+
+def _merge_with_prerendered(merged: list[dict], prerendered_state: dict[str, dict]) -> list[dict]:
+    for item in merged:
+        listing_id = item.get("source_listing_id")
+        if listing_id and listing_id in prerendered_state:
+            data = prerendered_state[listing_id]
+            if data.get("description"):
+                item["description"] = data["description"]
+            if data.get("title") and not item.get("title"):
+                item["title"] = data["title"]
+            
+            # Use parser regexes on detail_params if available!
+            params = data.get("detail_params", {})
+            if params:
+                item["detail_params"] = params
+                if not item.get("area_sqm"):
+                    item["area_sqm"] = _extract_area_sqm(params.get("powierzchnia"))
+                if not item.get("rooms"):
+                    item["rooms"] = _extract_rooms(params.get("liczba pokoi"))
+                if not item.get("floor"):
+                    item["floor"] = params.get("poziom") or params.get("piętro")
+                if not item.get("price_per_sqm_source"):
+                    item["price_per_sqm_source"] = _extract_price_per_sqm(params.get("cena za m²"))
+                    
     return merged

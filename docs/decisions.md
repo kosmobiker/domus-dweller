@@ -16,15 +16,16 @@
 ## Data Layer Policy
 
 - Bronze: append-only facts, no dedup, no SCD.
-- Silver: cleaning, deduplication, SCD (`is_current`, validity windows).
+- Silver: cleaning, deduplication, SCD (`is_current`, validity windows) via dbt-core.
 - Gold: aggregated analytics-ready outputs.
 
 ## Platform Direction
 
 - scheduler: GitHub Actions.
 - Bronze warehouse: MotherDuck (DuckDB).
+- Silver/Gold transformations: dbt-core.
 - parser/sink code: Python (`uv`, `ruff`, `pytest`).
-- Alembic: not used, prefer direct SQL/DuckDB migrations.
+- Alembic: not used, prefer dbt for modeling.
 
 ## Cost Constraint
 
