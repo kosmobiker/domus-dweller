@@ -50,4 +50,4 @@ Every sink run expects `MOTHERDUCK_TOKEN` to be set and optionally accepts `MOTH
 
 - The sink keeps the original parsed row under `raw_json` and adds `payload_hash`, `ingested_at`, and `layer` so Silver can detect drift without re-parsing.
 - The loader uses PyArrow to convert normalized dicts into a single table before issuing `INSERT INTO bronze.<mode>_bronze SELECT ... FROM arrow_table`. This keeps round-trips low and matches DuckDB's in-memory strengths.
-- Keep the Bronze layer appendix-only; dedup/SCD should happen later when building Silver outputs in MotherDuck SQL scripts or notebooks.
+- Keep the Bronze layer appendix-only; dedup/SCD should happen later when building Silver outputs in dbt models.

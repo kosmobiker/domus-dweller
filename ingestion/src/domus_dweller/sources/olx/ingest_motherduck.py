@@ -8,6 +8,7 @@ import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from domus_dweller.sinks.motherduck import load_rows_to_motherduck
+from domus_dweller.sources.olx.ai_extractor import enrich_with_ai
 from domus_dweller.sources.olx.parser import parse_search_results
 
 OLX_BASE_URL = "https://www.olx.pl/nieruchomosci"
@@ -145,6 +146,9 @@ def run_olx_mode_to_motherduck(
         search_timeout_sec=search_timeout_sec,
     )
     print(f"[olx:{mode}] Search rows collected: {len(search_rows)}")
+
+    # LLM Enrichment
+    enrich_with_ai(search_rows, mode=mode)
 
     inserted = load_rows_to_motherduck(
         search_rows,

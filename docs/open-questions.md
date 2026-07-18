@@ -8,6 +8,7 @@
 ## Data Quality
 
 3. Which `detail_params` keys should be promoted to first-class columns next?
+   - *Recommendation based on EDA:* The most frequently occurring keys not yet promoted are `umeblowane` (furnished), `czynsz (dodatkowo)` (additional rent), `zwierzęta` (pets), `winda` (elevator), and `parking`.
 4. Should we enforce minimum required fields in Bronze beyond current mandatory keys?
 
 ## Silver Design
@@ -22,3 +23,4 @@
 9. How to handle Otodom and OLX detail page firewalls in GitHub Actions? (GHA IPs are often blocked).
 10. Should we use a local-run + git-push approach for detail pages if GHA remains blocked?
 11. Should we run dbt as a separate GHA job or combine it with the sink job?
+    - *Resolved:* Run as a separate `silver` job in GHA that depends on `parse` and `sink`.

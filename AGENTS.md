@@ -167,14 +167,17 @@ Avoid starting with fragile composite scores before the base metrics are trustwo
 
 ### AI Skill
 
-Use "AI" only where it adds leverage:
+Use "AI" only where it adds leverage. We use a **Hybrid Fallback Architecture** for ingestion:
+- **First pass (Regex)**: Extract structured fields (`price`, `area_sqm`, `rooms`, `floor`) from HTML badges natively for speed and accuracy.
+- **Second pass (LLM)**: Extract unstructured amenities (`furnished`, `pets_allowed`, `balcony`, `year_built`) from the listing description text using `gemini-3.1-flash-lite` in batched pipeline calls.
+- **Safety Net**: Use the LLM outputs as a fallback via `COALESCE` in dbt (or during ingestion) if the baseline regex parser fails.
 
-- amenity extraction from Polish listing descriptions
+Other accepted uses of AI:
 - duplicate detection across portals
 - outlier explanation
 - natural-language search over saved analytics summaries
 
-Default to rule-based or statistical methods first. Only add models after the baseline pipeline is reliable.
+Default to rule-based or statistical methods first. Only add models after the baseline pipeline is reliable (which we have now done with the LLM enricher).
 
 ### Zero-Cost Skill
 

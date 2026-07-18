@@ -14,7 +14,7 @@ The goal is to collect flat and house listings over time, normalize them into a 
 
 ## Current Direction
 
-- Phase 1: OLX-only ingestion (rent + sale) from search pages.
+- Phase 1: OLX-only ingestion (rent + sale) from search pages using a **Hybrid Regex + LLM (Gemini) Architecture**.
 - Phase 1 storage: MotherDuck (DuckDB) Bronze append-only tables (`rent_bronze`, `sale_bronze`).
 - Phase 2: Silver/Gold transformations (cleaning, dedup, SCD, aggregates).
 - Phase 3: notebook analytics and lightweight web app.

@@ -30,6 +30,10 @@ Preferred order:
 - validate dataset/table creation contract
 - validate partitioning/clustering setup
 
+5. Silver / dbt Layer Tests
+- functional testing via `test_dbt_silver_layer.py`
+- standard `dbt test` assertions (unique, not_null, accepted_values)
+
 ## Current Focus
 
 - Prefer tests around behavior and contracts, not tiny helpers.

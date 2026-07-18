@@ -9,7 +9,7 @@
 
 Success: Daily ingestion is stable and monitored.
 
-## Phase 2: Silver Foundations (Active)
+## Phase 2: Silver Foundations (Done)
 
 - define Silver contracts (identity + versions + current)
 - implement dedup and SCD from Bronze
