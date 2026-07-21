@@ -21,7 +21,7 @@ WITH combined AS (
         COALESCE(CAST((raw_json::JSON)->>'pets_allowed' AS BOOLEAN), CAST((raw_json::JSON)->'detail_params'->'ai_extracted'->>'pets_allowed' AS BOOLEAN)) as pets_allowed,
         COALESCE(CAST((raw_json::JSON)->>'elevator' AS BOOLEAN), CAST((raw_json::JSON)->'detail_params'->'ai_extracted'->>'elevator' AS BOOLEAN)) as elevator,
         COALESCE(
-            CASE WHEN (raw_json::JSON)->>'parking' IS NOT NULL AND (raw_json::JSON)->>'parking' != '' THEN TRUE END,
+            CASE WHEN NULLIF((raw_json::JSON)->>'parking', '') IS NOT NULL THEN TRUE END,
             CAST((raw_json::JSON)->'detail_params'->'ai_extracted'->>'parking' AS BOOLEAN)
         ) as parking,
         COALESCE(CAST((raw_json::JSON)->>'balcony' AS BOOLEAN), CAST((raw_json::JSON)->'detail_params'->'ai_extracted'->>'balcony' AS BOOLEAN)) as balcony,
@@ -53,7 +53,7 @@ WITH combined AS (
         COALESCE(CAST((raw_json::JSON)->>'pets_allowed' AS BOOLEAN), CAST((raw_json::JSON)->'detail_params'->'ai_extracted'->>'pets_allowed' AS BOOLEAN)) as pets_allowed,
         COALESCE(CAST((raw_json::JSON)->>'elevator' AS BOOLEAN), CAST((raw_json::JSON)->'detail_params'->'ai_extracted'->>'elevator' AS BOOLEAN)) as elevator,
         COALESCE(
-            CASE WHEN (raw_json::JSON)->>'parking' IS NOT NULL AND (raw_json::JSON)->>'parking' != '' THEN TRUE END,
+            CASE WHEN NULLIF((raw_json::JSON)->>'parking', '') IS NOT NULL THEN TRUE END,
             CAST((raw_json::JSON)->'detail_params'->'ai_extracted'->>'parking' AS BOOLEAN)
         ) as parking,
         COALESCE(CAST((raw_json::JSON)->>'balcony' AS BOOLEAN), CAST((raw_json::JSON)->'detail_params'->'ai_extracted'->>'balcony' AS BOOLEAN)) as balcony,
