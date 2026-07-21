@@ -71,7 +71,7 @@ def parse_detail_page(raw_html: str) -> dict:
         "elevator": _extract_yes_no(detail_params.get("winda")),
         "pets_allowed": _extract_yes_no(detail_params.get("zwierzęta")),
         "room_type": detail_params.get("rodzaj pokoju"),
-        "parking": detail_params.get("parking"),
+        "parking": True if detail_params.get("parking") else None,
         "preferred_tenants": detail_params.get("preferowani"),
         "building_floors": _extract_building_floors(detail_params.get("liczba pięter")),
         "land_area_sqm": _extract_area_sqm(detail_params.get("powierzchnia działki")),

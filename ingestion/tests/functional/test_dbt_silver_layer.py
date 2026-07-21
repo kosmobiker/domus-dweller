@@ -191,7 +191,7 @@ def test_dbt_silver_layer(tmp_path):
     ).fetchall()
     assert len(current) == 1
     row = current[0]
-    assert row[0] is True, "parking='na ulicy' should be cast to TRUE"
+    assert row[0] is None, "parking='na ulicy' should be NULL without AI"
     assert row[1] is True, "furnished should be TRUE"
     assert row[2] is True, "elevator should be TRUE"
     assert row[3] is True, "balcony (from ai_extracted) should be TRUE"
