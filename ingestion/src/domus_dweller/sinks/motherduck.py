@@ -36,7 +36,11 @@ def _payload_hash(row: dict[str, Any]) -> str:
 
 
 def _normalize_row(
-    row: dict[str, Any], *, mode: str, snapshot_date: date, ingested_at: datetime
+    row: dict[str, Any],
+    *,
+    mode: str,
+    snapshot_date: date,
+    ingested_at: datetime,
 ) -> dict[str, Any]:
     base = dict(row)
     base["mode"] = mode
@@ -110,13 +114,19 @@ def load_rows_to_motherduck(
         con = duckdb.connect(f"md:{database}?token={token}")
 
     table_name = f"bronze.{mode}_bronze"
-
-    # Use pyarrow to efficiently load the list of dicts
-    arrow_table = pa.Table.from_pylist(normalized_rows)
-
     table_columns = _table_columns(con, table_name)
     if not table_columns:
         raise ValueError(f"MotherDuck table has no columns or does not exist: {table_name}")
+
+    # Only pass columns that exist in the target table to avoid PyArrow mixed-type crashes
+    # for unused fields (e.g., 'floor' being int vs str).
+    filtered_rows = [
+        {k: v for k, v in row.items() if k in table_columns}
+        for row in normalized_rows
+    ]
+
+    # Use pyarrow to efficiently load the list of dicts
+    arrow_table = pa.Table.from_pylist(filtered_rows)
 
     source_columns = set(arrow_table.column_names)
     missing_required = [col for col in REQUIRED_SINK_COLUMNS if col not in source_columns]
