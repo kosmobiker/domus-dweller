@@ -58,16 +58,16 @@ def test_enrich_with_ai_extracts_and_merges_rent_amenities(monkeypatch):
     assert ai_data["additional_rent_pln"] == 500
 
 
-def test_enrich_with_ai_skips_when_no_descriptions(monkeypatch):
+def test_enrich_with_ai_skips_when_no_text_evidence(monkeypatch):
     # Given: A mock client
     mock_client = MagicMock()
     monkeypatch.setattr("domus_dweller.sources.olx.ai_extractor.get_client", lambda: mock_client)
 
-    # Given: Rows that have no description or empty descriptions
+    # Given: Rows that have no text evidence (no description, no title, no params)
     rows = [
-        {"source_listing_id": "olx-000", "description": ""},
-        {"source_listing_id": "olx-999", "description": None},
-        {"source_listing_id": "olx-555"}  # Missing key entirely
+        {"source_listing_id": "olx-000", "description": "", "title": ""},
+        {"source_listing_id": "olx-999", "description": None, "title": None},
+        {"source_listing_id": "olx-555"}  # Missing keys entirely
     ]
 
     # When: We run the AI enrichment
