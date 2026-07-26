@@ -18,6 +18,7 @@ on:
 env:
   MD_DATABASE: my_db
   MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
 jobs:
   parse:

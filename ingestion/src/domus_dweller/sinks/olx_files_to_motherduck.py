@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from domus_dweller.sinks.motherduck import load_rows_to_motherduck
+from domus_dweller.sources.olx.ai_extractor import enrich_with_ai
 
 
 def _build_args() -> argparse.Namespace:
@@ -89,13 +90,18 @@ def _sink_mode(
     snapshot_date: date,
 ) -> int:
     rows = _read_rows(input_path)
+    print(f"[sink:{mode}] Loaded {len(rows)} rows from {input_path}")
+
+    # LLM Enrichment (extracts amenities via Gemini API)
+    enrich_with_ai(rows, mode=mode)
+
     inserted = load_rows_to_motherduck(
         rows,
         mode=mode,
         database=database,
         snapshot_date=snapshot_date,
     )
-    print(f"[sink:{mode}] Loaded {inserted} rows from {input_path}")
+    print(f"[sink:{mode}] Inserted {inserted} rows into MotherDuck")
     return inserted
 
 
