@@ -63,15 +63,17 @@ def enrich_with_ai(rows: list[dict], mode: str) -> None:
         print(f"[olx:{mode}] Skipping AI extraction (GEMINI_API_KEY not set or no rows)")
         return
 
-    # Map ID to Listing Data (Description + Params)
+    # Map ID to Listing Data (Title + Description + Params)
     batch_dict = {}
     for row in rows:
         lid = row.get("source_listing_id")
+        title = row.get("title", "")
         desc = row.get("description", "")
         params = row.get("detail_params", {})
-        if lid and (desc or params):
+        if lid and (desc or params or title):
             # Limit description length to save tokens, but pass full params
             batch_dict[lid] = {
+                "title": title,
                 "description": str(desc)[:800].strip() if desc else "",
                 "detail_params": params
             }
