@@ -1,4 +1,16 @@
-from domus_dweller.sources.olx.parser import parse_search_results
+import json
+
+from domus_dweller.sources.olx.parser import (
+    _extract_area_sqm,
+    _extract_building_floors,
+    _extract_floor_from_text,
+    _extract_price_per_sqm,
+    _extract_rooms,
+    _extract_rooms_from_text,
+    _extract_yes_no,
+    _seller_segment_from_text,
+    parse_search_results,
+)
 
 
 def test_given_olx_seller_labels_when_parsing_then_segments_are_normalized() -> None:
@@ -168,3 +180,97 @@ def test_given_olx_cards_and_jsonld_when_parsing_then_rows_are_enriched_by_id() 
     assert listings[0]["district"] == "Stare Miasto"
     assert listings[0]["location_approx"] == "Kraków, Stare Miasto"
     assert listings[0]["images"] == ["https://cdn.example/1.jpg"]
+
+
+def test_extractor_edge_cases() -> None:
+    assert _extract_area_sqm(None) is None
+    assert _extract_area_sqm("") is None
+    assert _extract_area_sqm("invalid text") is None
+    
+    assert _extract_rooms(None) is None
+    assert _extract_rooms("") is None
+    
+    assert _extract_rooms_from_text(None) is None
+    assert _extract_rooms_from_text("") is None
+    assert _extract_rooms_from_text("no rooms here") is None
+    
+    assert _extract_floor_from_text(None) is None
+    assert _extract_floor_from_text("") is None
+    assert _extract_floor_from_text("no floor") is None
+    
+    assert _extract_yes_no(None) is None
+    assert _extract_yes_no("") is None
+    assert _extract_yes_no("unknown") is None
+    assert _extract_yes_no("tak") is True
+    assert _extract_yes_no("nie") is False
+    
+    assert _extract_building_floors(None) is None
+    assert _extract_building_floors("") is None
+    assert _extract_building_floors("dwupiętrowy") == 2
+    assert _extract_building_floors("jednopiętrowy") == 1
+    assert _extract_building_floors("parterowy z użytkowym poddaszem") == 1
+    assert _extract_building_floors("parterowy") == 0
+    assert _extract_building_floors("unknown") is None
+    
+    assert _extract_price_per_sqm(None) is None
+    assert _extract_price_per_sqm("") is None
+    assert _extract_price_per_sqm("no price") is None
+    
+    assert _seller_segment_from_text("") == "unknown"
+    
+
+
+def test_given_olx_prerendered_state_when_parsing_then_rows_are_enriched() -> None:
+    state_dict = {
+        "listing": {
+            "listing": {
+                "ads": [
+                    {
+                        "id": "19ShY0",
+                        "title": "Title from state",
+                        "description": "Desc from state<br />newline",
+                        "params": [
+                            {"name": "Powierzchnia", "value": "50 m²"},
+                            {"name": "Liczba pokoi", "value": "2 pokoje"},
+                            {"name": "Poziom", "value": "3"},
+                            {"name": "Cena za m²", "value": "100 zł/m²"}
+                        ]
+                    }
+                ]
+            }
+        }
+    }
+    # Escape quotes for the JS string literal
+    state_json = json.dumps(state_dict).replace('"', '\\"')
+    raw_html = f'''
+    <html><body>
+      <section>
+        <article data-cy="l-card" data-id="olx-19ShY0">
+          <a href="https://www.olx.pl/d/oferta/mieszkanie-kawalerka-CID3-ID19ShY0.html"></a>
+          <p>Firma</p>
+        </article>
+      </section>
+      <script>
+        window.__PRERENDERED_STATE__ = "{state_json}";
+      </script>
+    </body></html>
+    '''
+
+    listings = parse_search_results(raw_html)
+    assert len(listings) == 1
+    assert listings[0]["title"] == "Title from state"
+    assert listings[0]["description"] == "Desc from state\nnewline"
+
+
+def test_given_bad_jsonld_when_parsing_then_ignores() -> None:
+    raw_html = """
+    <html><body>
+        <script type='application/ld+json'></script>
+        <script type='application/ld+json'>{bad json}</script>
+        <script type='application/ld+json'>{"offers": "not a dict"}</script>
+        <script type='application/ld+json'>{"offers": {"offers": "not a list"}}</script>
+        <script type='application/ld+json'>{"offers": {"offers": ["not a dict"]}}</script>
+    </body></html>
+    """
+    listings = parse_search_results(raw_html)
+    assert len(listings) == 0

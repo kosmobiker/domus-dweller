@@ -15,22 +15,27 @@ No dedup and no SCD in ingestion. Those belong to Silver.
 - Python 3.13
 - `uv` for env/deps
 - `ruff` for linting
-- `httpx` + `selectolax` for ingestion/parsing
+- `curl` (Makefile fetch) + `selectolax` for HTML parsing
+- `httpx` available for direct ingestion mode
 - MotherDuck (DuckDB) for Bronze storage (`bronze.rent_bronze`, `bronze.sale_bronze`)
 - GitHub Actions for daily scheduling
 
 ## Daily Job Shape
 
-Two jobs in GitHub Actions:
+Three jobs in GitHub Actions (`daily-olx-motherduck.yml`):
 
 1. `parse` job:
    - run `make daily-olx-parse`
    - upload parsed artifacts for the same snapshot date
 
-2. `sink` job:
+2. `sink` job (depends on `parse`):
    - download artifacts
    - run `make motherduck-bootstrap`
    - run `make daily-olx-sink-motherduck` (with retries)
+
+3. `silver` job (depends on `parse` + `sink`):
+   - run `make silver-sync` (dbt deps + dbt build)
+   - run `dbt test` to verify Silver integrity
 
 ## Local Commands
 
@@ -40,10 +45,10 @@ make motherduck-bootstrap MD_DATABASE=my_db
 make daily-olx-sink-motherduck DATE=2026-04-04 MD_DATABASE=my_db
 ```
 
-Direct one-step ingestion is also available:
+Direct one-step ingestion is also available via the Python module (no Make target):
 
 ```bash
-make daily-olx-motherduck MD_DATABASE=my_db PAGES=30 CITIES="krakow wieliczka"
+uv run python -m domus_dweller.sources.olx.ingest_motherduck --database my_db
 ```
 
 ## Testing Policy

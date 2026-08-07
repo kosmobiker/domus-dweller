@@ -22,6 +22,7 @@ Success: Stable `is_current` and version history for OLX listings in MotherDuck.
 - add rent/sale aggregates
 - add city/district/municipality views
 - add initial H3 aggregates where coordinates allow
+- EDA notebook exists: `notebooks/eda_motherduck_raw.ipynb`
 
 Success: useful weekly notebook analysis without manual data wrangling.
 
@@ -32,3 +33,20 @@ Success: useful weekly notebook analysis without manual data wrangling.
 - keep source-specific parsing isolated
 
 Success: second source lands in Bronze without breaking OLX pipeline.
+
+## Phase 5: Web Frontend (Planned)
+
+- Next.js app on Vercel free tier
+- map visualization with MapLibre + OpenStreetMap tiles
+- listing search, filters, price trend charts
+- area comparison views
+
+Success: public-facing analytics dashboard with zero recurring cost.
+
+## Phase 6: Operations & Monitoring (Planned)
+
+- freshness monitoring and failure alerting
+- data quality dashboard
+- null-rate and parser-drift tracking
+
+Success: self-healing pipeline with proactive issue detection.
