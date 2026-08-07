@@ -411,3 +411,47 @@ def test_given_consecutive_403_wall_when_enriching_then_fail_fast_keeps_tail_row
     assert len(calls) == 2
     assert len(enriched) == 4
     assert [row["source_listing_id"] for row in enriched] == ["id1", "id2", "id3", "id4"]
+
+
+def test_given_save_html_dir_and_empty_url_and_sale_mode_when_enriching(
+    monkeypatch, tmp_path: Path
+) -> None:
+    # Given
+    listings = [
+        {"source_listing_id": "id1", "source_url": ""},
+        {"source_listing_id": "id2", "source_url": "https://www.olx.pl/d/oferta/mieszkania/sprzedaz/2.html"},
+        {"source_listing_id": "", "source_url": "https://www.olx.pl/d/oferta/3.html"},
+        {
+            "source_listing_id": "id4",
+            "source_url": "https://www.olx.pl/d/oferta/4.html",
+            "mode": "rent",
+        }
+    ]
+    def _fake_fetch_html(url: str, *_args, **_kwargs) -> str:
+        if "3.html" in url:
+            request = httpx.Request("GET", url)
+            response = httpx.Response(status_code=404, request=request)
+            raise httpx.HTTPStatusError("not found", request=request, response=response)
+        return "<html><body><p data-nx-name='P3'>Powierzchnia: 10 m²</p></body></html>"
+    
+    monkeypatch.setattr(enrich, "_fetch_html", _fake_fetch_html)
+    
+    # When
+    enriched = enrich.enrich_listings(
+        listings,
+        save_html_dir=tmp_path,
+        pause_ms=0,
+        timeout_sec=5.0,
+        default_mode="unknown_mode",
+    )
+    
+    # Then
+    assert len(enriched) == 4
+    assert enriched[0]["source_url"] == ""
+    assert enriched[1]["mode"] == "sale"
+    assert enriched[1]["area_sqm"] == 10.0
+    assert enriched[2]["source_listing_id"] == ""
+    assert enriched[3]["mode"] == "rent"
+    
+    saved_files = list(tmp_path.glob("*.html"))
+    assert len(saved_files) == 2

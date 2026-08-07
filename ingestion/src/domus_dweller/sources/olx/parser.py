@@ -116,7 +116,7 @@ def _parse_card_listings(tree: HTMLParser) -> list[dict]:
                 "source_listing_id": source_listing_id,
                 "source_url": source_url,
                 "title": title,
-                "description": seller_text, # Added for LLM
+                "description": seller_text,
                 "price_total": price_total,
                 "price_per_sqm_source": price_per_sqm_source,
                 "currency": currency,
@@ -188,7 +188,7 @@ def _parse_jsonld_offers(tree: HTMLParser, *, page_city: str | None) -> list[dic
                     "source_listing_id": source_listing_id,
                     "source_url": source_url,
                     "title": str(offer.get("name", "")).strip(),
-                    "description": str(offer.get("description", "")).strip(), # Added for LLM
+                    "description": str(offer.get("description", "")).strip(),
                     "price_total": price_total,
                     "price_per_sqm_source": price_per_sqm_source,
                     "currency": price_currency,

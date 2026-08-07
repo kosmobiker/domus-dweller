@@ -40,14 +40,20 @@ Every sink run expects `MOTHERDUCK_TOKEN` to be set and optionally accepts `MOTH
    ```
    The target mode(s) default to both `rent` and `sale`. The command retries up to three times with exponential backoff if the sink fails.
 
-4. **Direct ingestion mode** (scrape + sink without persisted artifacts):
+4. **Direct ingestion mode** (scrape + sink without persisted artifacts, no Make target):
    ```bash
-   make daily-olx-motherduck MD_DATABASE=my_db PAGES=30 CITIES="krakow wieliczka" ENRICH_PAUSE_MS=250
+   uv run python -m domus_dweller.sources.olx.ingest_motherduck --database my_db
    ```
-   This command runs the ingestion pipeline end-to-end per mode, skipping the parse/sink split.
+   This runs the ingestion pipeline end-to-end per mode, skipping the parse/sink split.
+
+5. **Silver sync** (run after sink to build Silver models):
+   ```bash
+   make silver-sync
+   ```
+   Runs `dbt deps` + `dbt build` against MotherDuck. Also executed automatically by the `silver` job in the GHA workflow.
 
 ## Notes
 
 - The sink keeps the original parsed row under `raw_json` and adds `payload_hash`, `ingested_at`, and `layer` so Silver can detect drift without re-parsing.
 - The loader uses PyArrow to convert normalized dicts into a single table before issuing `INSERT INTO bronze.<mode>_bronze SELECT ... FROM arrow_table`. This keeps round-trips low and matches DuckDB's in-memory strengths.
-- Keep the Bronze layer appendix-only; dedup/SCD should happen later when building Silver outputs in dbt models.
+- Keep the Bronze layer append-only; dedup/SCD should happen later when building Silver outputs in dbt models.

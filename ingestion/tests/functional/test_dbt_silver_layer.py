@@ -26,15 +26,11 @@ REALISTIC_RENT_JSON_DAY1 = json.dumps({
     "pets_allowed": False,
     "elevator": True,
     "parking": "w garażu",
-    "detail_params": {
-        "ai_extracted": {
-            "balcony": True,
-            "additional_rent_pln": 500,
-            "building_material": "cegła",
-            "year_built": 2015,
-            "ownership_type": "własność"
-        }
-    }
+    "balcony": True,
+    "rent_additional": 500,
+    "building_material": "cegła",
+    "year_built": 2015,
+    "ownership_type": "własność"
 })
 
 REALISTIC_RENT_JSON_DAY2 = json.dumps({
@@ -54,15 +50,11 @@ REALISTIC_RENT_JSON_DAY2 = json.dumps({
     "pets_allowed": False,
     "elevator": True,
     "parking": "w garażu",
-    "detail_params": {
-        "ai_extracted": {
-            "balcony": True,
-            "additional_rent_pln": 500,
-            "building_material": "cegła",
-            "year_built": 2015,
-            "ownership_type": "własność"
-        }
-    }
+    "balcony": True,
+    "rent_additional": 500,
+    "building_material": "cegła",
+    "year_built": 2015,
+    "ownership_type": "własność"
 })
 
 REALISTIC_RENT_JSON_DAY3 = REALISTIC_RENT_JSON_DAY2  # same price, duplicate observation
@@ -84,15 +76,11 @@ REALISTIC_RENT_JSON_DAY4 = json.dumps({
     "pets_allowed": False,
     "elevator": True,
     "parking": "na ulicy",
-    "detail_params": {
-        "ai_extracted": {
-            "balcony": True,
-            "additional_rent_pln": 500,
-            "building_material": "cegła",
-            "year_built": 2015,
-            "ownership_type": "własność"
-        }
-    }
+    "balcony": True,
+    "rent_additional": 500,
+    "building_material": "cegła",
+    "year_built": 2015,
+    "ownership_type": "własność"
 })
 
 
@@ -194,7 +182,7 @@ def test_dbt_silver_layer(tmp_path):
     assert row[0] is None, "parking='na ulicy' should be NULL without AI"
     assert row[1] is True, "furnished should be TRUE"
     assert row[2] is True, "elevator should be TRUE"
-    assert row[3] is True, "balcony (from ai_extracted) should be TRUE"
+    assert row[3] is True, "balcony should be TRUE"
     assert row[4] == "cegła", "building_material should be 'cegła'"
     assert row[5] == 2015, "year_built should be 2015"
 

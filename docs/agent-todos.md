@@ -12,7 +12,7 @@ Current objective: start Gold/Analytics.
 - Warehouse: MotherDuck (DuckDB).
 - Scheduler: GitHub Actions (`parse` job + `sink` job + `silver-sync` job).
 
-## Immediate Backlog (Next 2-3 Days)
+## Completed Milestones
 
 1. Silver Sync Hardening.
 - [x] Implement initial silver-sync using dbt-core and DuckDB.
@@ -24,10 +24,16 @@ Current objective: start Gold/Analytics.
 - [x] Expand extraction from `detail_params` into normalized typed fields.
 - [x] Add normalization for high-value OLX params per mode (rent vs sale).
 - [x] Add parser regression fixtures for known noisy `detail_params` keys.
-- [x] **Urgent:** Fix parser coverage for `area_sqm`, `rooms`, `floor`, and `price_per_sqm` (Solved via Hybrid Regex + LLM fallback architecture).
+- [x] **Urgent:** Fix parser coverage for `area_sqm`, `rooms`, `floor`, and `price_per_sqm` via parser-driven extraction.
+
+## Active Backlog
+
+### Data Quality
+
 - [ ] Implement outlier rejection in Silver (e.g., total price < 100 PLN, > 10M PLN).
 
-3. Observability.
+### Observability
+
 - [ ] Add run summary in GitHub Actions with counts by mode.
 - [ ] Record parse count vs sink count to detect data loss.
 - [ ] Add simple null-rate report notebook for key columns.

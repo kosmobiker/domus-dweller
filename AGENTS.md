@@ -165,19 +165,12 @@ Start with robust metrics:
 
 Avoid starting with fragile composite scores before the base metrics are trustworthy.
 
-### AI Skill
+### Extraction Policy
 
-Use "AI" only where it adds leverage. We use a **Hybrid Fallback Architecture** for ingestion:
-- **First pass (Regex)**: Extract structured fields (`price`, `area_sqm`, `rooms`, `floor`) from HTML badges natively for speed and accuracy.
-- **Second pass (LLM)**: Extract unstructured amenities (`furnished`, `pets_allowed`, `balcony`, `year_built`) from the listing description text using `gemini-3.1-flash-lite` in batched pipeline calls.
-- **Safety Net**: Use the LLM outputs as a fallback via `COALESCE` in dbt (or during ingestion) if the baseline regex parser fails.
-
-Other accepted uses of AI:
-- duplicate detection across portals
-- outlier explanation
-- natural-language search over saved analytics summaries
-
-Default to rule-based or statistical methods first. Only add models after the baseline pipeline is reliable (which we have now done with the LLM enricher).
+Use parser- and rule-based extraction for ingestion.
+- Extract structured fields directly from OLX search/detail HTML and source JSON.
+- Leave unsupported fields null rather than guessing.
+- Do not depend on LLM enrichment in the runtime ingestion or Silver models.
 
 ### Zero-Cost Skill
 

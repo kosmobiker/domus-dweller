@@ -1,6 +1,6 @@
 .PHONY: lint test data verify daily-olx-rent daily-olx-sale daily-olx daily-olx-parse daily-olx-sink-motherduck motherduck-bootstrap silver-sync
 
-COV_MIN := 70
+COV_MIN := 90
 UA := Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36
 OLX_BASE_URL := https://www.olx.pl/nieruchomosci
 FETCH_FLAGS := --fail --silent --show-error --location --retry 3 --retry-delay 2 --connect-timeout 10 --max-time 45
@@ -13,8 +13,6 @@ PROPERTY_TYPES_RENT ?= mieszkania domy pokoje
 PROPERTY_TYPES_SALE ?= mieszkania domy
 PAGES ?= 30
 DATE ?= $(shell date +%F)
-ENRICH_PAUSE_MS ?= 250
-
 lint:
 	uv run ruff check .
 

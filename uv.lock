@@ -585,7 +585,6 @@ dependencies = [
     { name = "db-dtypes" },
     { name = "dbt-duckdb" },
     { name = "duckdb" },
-    { name = "google-genai" },
     { name = "h3" },
     { name = "httpx" },
     { name = "matplotlib" },
@@ -614,7 +613,6 @@ requires-dist = [
     { name = "db-dtypes", specifier = ">=1.4.0" },
     { name = "dbt-duckdb", specifier = ">=1.8.0" },
     { name = "duckdb", specifier = "==1.5.2" },
-    { name = "google-genai", specifier = ">=2.12.1" },
     { name = "h3", specifier = ">=4.2.2" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "matplotlib", specifier = ">=3.10.8" },
@@ -713,27 +711,6 @@ wheels = [
 [package.optional-dependencies]
 requests = [
     { name = "requests" },
-]
-
-[[package]]
-name = "google-genai"
-version = "2.12.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-    { name = "distro" },
-    { name = "google-auth", extra = ["requests"] },
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "requests" },
-    { name = "sniffio" },
-    { name = "tenacity" },
-    { name = "typing-extensions" },
-    { name = "websockets" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/96/59/9ea84cbeb8f09694564d3b0ee9dd59003551b308d47b61f251415df93982/google_genai-2.12.1.tar.gz", hash = "sha256:78c25217885d63dc430ca7c4526853512b164a25a93a8a0d0af5b85971aa1db0", size = 636710, upload-time = "2026-07-16T16:15:02.035Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b6/b4/1369fb413fc2ba7f78acace5590b6e9990c52ab5d1d166aafaa1ae2c28c8/google_genai-2.12.1-py3-none-any.whl", hash = "sha256:686d5ec39bda345151d3ed1bac3915f01f49138b1ea519af2eb98f11cc55ebc4", size = 1023403, upload-time = "2026-07-16T16:14:59.79Z" },
 ]
 
 [[package]]

@@ -1,1 +1,1 @@
-"""Sink modules for persisting parsed/enriched listing facts."""
+"""Sink modules for persisting parsed listing facts."""

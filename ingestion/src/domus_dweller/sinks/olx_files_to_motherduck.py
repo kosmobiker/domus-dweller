@@ -7,13 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from domus_dweller.sinks.motherduck import load_rows_to_motherduck
-from domus_dweller.sources.olx.ai_extractor import enrich_with_ai
 
 
 def _build_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Load already parsed+enriched OLX JSON files into MotherDuck Bronze tables "
+            "Load already parsed OLX JSON files into MotherDuck Bronze tables "
             "(`rent_bronze` and `sale_bronze`)."
         )
     )
@@ -32,13 +31,13 @@ def _build_args() -> argparse.Namespace:
         "--input-rent",
         type=Path,
         default=None,
-        help="Path to enriched rent file. Defaults to data/parsed/<date>/olx_rent_all.json.",
+        help="Path to parsed rent file. Defaults to data/parsed/<date>/olx_rent_all.json.",
     )
     parser.add_argument(
         "--input-sale",
         type=Path,
         default=None,
-        help="Path to enriched sale file. Defaults to data/parsed/<date>/olx_sale_all.json.",
+        help="Path to parsed sale file. Defaults to data/parsed/<date>/olx_sale_all.json.",
     )
     return parser.parse_args()
 
@@ -91,9 +90,6 @@ def _sink_mode(
 ) -> int:
     rows = _read_rows(input_path)
     print(f"[sink:{mode}] Loaded {len(rows)} rows from {input_path}")
-
-    # LLM Enrichment (extracts amenities via Gemini API)
-    enrich_with_ai(rows, mode=mode)
 
     inserted = load_rows_to_motherduck(
         rows,

@@ -10,14 +10,14 @@ The goal is to collect flat and house listings over time, normalize them into a 
 - Optimize for zero recurring cost.
 - Treat each source as an isolated adapter.
 - Store both raw observations and normalized facts.
-- Prefer simple analytics before adding AI.
+- Prefer simple analytics and rule-based extraction.
 
 ## Current Direction
 
-- Phase 1: OLX-only ingestion (rent + sale) from search pages using a **Hybrid Regex + LLM (Gemini) Architecture**.
-- Phase 1 storage: MotherDuck (DuckDB) Bronze append-only tables (`rent_bronze`, `sale_bronze`).
-- Phase 2: Silver/Gold transformations (cleaning, dedup, SCD, aggregates).
-- Phase 3: notebook analytics and lightweight web app.
+- ~~Phase 1~~: OLX-only ingestion (rent + sale) from search pages. **Done.** Bronze append-only tables in MotherDuck.
+- ~~Phase 2~~: Silver transformations (cleaning, dedup, SCD). **Done.** Identity, versions, and current-state models via dbt.
+- **Phase 3 (Active)**: Gold aggregates + notebook analytics.
+- Phase 4+: source expansion, web app.
 
 ## Data Layers
 
@@ -58,30 +58,42 @@ The goal is to collect flat and house listings over time, normalize them into a 
 ## Repo Shape
 
 ```text
-ingestion/      Python scraping and normalization pipeline
-transform/      dbt-core project (Silver/Gold layers, SCD snapshots, data tests)
-notebooks/      Jupyter analysis
-sql/            schema, migrations, and analysis queries
-apps/
-  web/          Next.js app on Vercel (Placeholder)
-packages/
-  analytics/    optional shared analytics code for later app work
-  db/           optional app-side database access helpers
-  scrapers/     optional JS/TS scraping experiments if ever needed
-  shared/       shared code for later frontend work
-docs/           architecture and planning
-.github/        scheduled workflows
+ingestion/                    Python scraping and normalization pipeline
+  src/domus_dweller/          main package
+    sources/olx/              OLX parser, enrichment, direct ingest
+    sources/otodom/           Otodom adapter (placeholder)
+    sinks/                    MotherDuck sink, bootstrap, file loader
+    parse.py                  CLI entry point for parsing
+    merge_pages.py            merges per-page JSONs into combined file
+  tests/
+    functional/               11 functional test modules
+    fixtures/olx/             frozen HTML fixtures
+transform/                    dbt-core project
+  models/staging/             stg_bronze_listings (JSON unpacking)
+  models/silver/              listing_identity, listing_versions, listing_current
+  snapshots/                  dbt snapshot for SCD Type 2
+notebooks/                    Jupyter analysis (eda_motherduck_raw.ipynb)
+data/
+  raw/                        fetched HTML pages (per date)
+  parsed/                     parsed JSON artifacts (per date)
+sql/                          standalone SQL scripts
+apps/web/                     Next.js app on Vercel (placeholder)
+packages/                     stub dirs: analytics, db, scrapers, shared
+docs/                         architecture and planning
+.github/workflows/            ci.yml + daily-olx-motherduck.yml
 ```
 
 ## Local Tooling
 
 ```bash
-make lint
-make test
-make data
+make lint           # ruff check
+make test           # pytest with 70% coverage minimum
+make data           # run dbt test against prod
+make verify         # lint + test (mirrors CI)
+make silver-sync    # dbt deps + dbt build against prod
 ```
 
-Always run `make verify` before pushing, it runs the lint and test matrix to mirror CI expectations.
+Always run `make verify` before pushing.
 
 ## Runbook
 
@@ -103,8 +115,14 @@ Local sink:
 make daily-olx-sink-motherduck DATE=$(date +%F) MD_DATABASE=my_db
 ```
 
-Full direct mode (without parse artifacts):
+Silver sync (after sink):
 
 ```bash
-make daily-olx-motherduck MD_DATABASE=my_db PAGES=30 CITIES="krakow wieliczka"
+make silver-sync
+```
+
+Direct ingestion mode (scrape + sink without parse artifacts, no Make target):
+
+```bash
+uv run python -m domus_dweller.sources.olx.ingest_motherduck --database my_db
 ```
