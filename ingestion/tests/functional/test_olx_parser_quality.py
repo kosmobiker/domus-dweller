@@ -186,24 +186,24 @@ def test_extractor_edge_cases() -> None:
     assert _extract_area_sqm(None) is None
     assert _extract_area_sqm("") is None
     assert _extract_area_sqm("invalid text") is None
-    
+
     assert _extract_rooms(None) is None
     assert _extract_rooms("") is None
-    
+
     assert _extract_rooms_from_text(None) is None
     assert _extract_rooms_from_text("") is None
     assert _extract_rooms_from_text("no rooms here") is None
-    
+
     assert _extract_floor_from_text(None) is None
     assert _extract_floor_from_text("") is None
     assert _extract_floor_from_text("no floor") is None
-    
+
     assert _extract_yes_no(None) is None
     assert _extract_yes_no("") is None
     assert _extract_yes_no("unknown") is None
     assert _extract_yes_no("tak") is True
     assert _extract_yes_no("nie") is False
-    
+
     assert _extract_building_floors(None) is None
     assert _extract_building_floors("") is None
     assert _extract_building_floors("dwupiętrowy") == 2
@@ -211,13 +211,12 @@ def test_extractor_edge_cases() -> None:
     assert _extract_building_floors("parterowy z użytkowym poddaszem") == 1
     assert _extract_building_floors("parterowy") == 0
     assert _extract_building_floors("unknown") is None
-    
+
     assert _extract_price_per_sqm(None) is None
     assert _extract_price_per_sqm("") is None
     assert _extract_price_per_sqm("no price") is None
-    
+
     assert _seller_segment_from_text("") == "unknown"
-    
 
 
 def test_given_olx_prerendered_state_when_parsing_then_rows_are_enriched() -> None:
@@ -233,8 +232,8 @@ def test_given_olx_prerendered_state_when_parsing_then_rows_are_enriched() -> No
                             {"name": "Powierzchnia", "value": "50 m²"},
                             {"name": "Liczba pokoi", "value": "2 pokoje"},
                             {"name": "Poziom", "value": "3"},
-                            {"name": "Cena za m²", "value": "100 zł/m²"}
-                        ]
+                            {"name": "Cena za m²", "value": "100 zł/m²"},
+                        ],
                     }
                 ]
             }
@@ -274,3 +273,53 @@ def test_given_bad_jsonld_when_parsing_then_ignores() -> None:
     """
     listings = parse_search_results(raw_html)
     assert len(listings) == 0
+
+
+def test_given_modern_div_cards_and_numeric_id_state_when_parsing_then_enriched() -> None:
+    state_dict = {
+        "listing": {
+            "listing": {
+                "ads": [
+                    {
+                        "id": 1082650130,
+                        "url": "https://www.olx.pl/d/oferta/mieszkanie-krakow-CID3-ID1bgGKS.html",
+                        "title": "Modern Title",
+                        "description": "Modern Description",
+                        "isBusiness": False,
+                        "params": [
+                            {"name": "Powierzchnia", "value": "45 m²"},
+                            {"name": "Liczba pokoi", "value": "2 pokoje"},
+                            {"name": "Poziom", "value": "2"},
+                        ],
+                    }
+                ]
+            }
+        }
+    }
+    state_json = json.dumps(state_dict).replace('"', '\\"')
+    raw_html = f"""
+    <html><body>
+      <div data-cy="l-card" id="1082650130">
+        <div data-testid="ad-card-title">
+          <a data-testid="card-title-link" href="/d/oferta/mieszkanie-krakow-CID3-ID1bgGKS.html">
+            <style>.css-fake {{ color: red; }}</style>
+            <h4>Modern Title</h4>
+          </a>
+        </div>
+        <p data-testid="ad-price">2 500 zł</p>
+      </div>
+      <script>
+        window.__PRERENDERED_STATE__ = "{state_json}";
+      </script>
+    </body></html>
+    """
+
+    listings = parse_search_results(raw_html)
+    assert len(listings) == 1
+    assert listings[0]["source_listing_id"] == "olx-1bgGKS"
+    assert listings[0]["title"] == "Modern Title"
+    assert listings[0]["price_total"] == 2500.0
+    assert listings[0]["area_sqm"] == 45.0
+    assert listings[0]["rooms"] == 2.0
+    assert listings[0]["seller_segment"] == "private"
+    assert "source_numeric_id" not in listings[0]

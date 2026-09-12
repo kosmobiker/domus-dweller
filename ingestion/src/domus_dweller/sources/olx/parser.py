@@ -26,6 +26,8 @@ def _seller_type_from_text(seller_text: str) -> str:
 
 def parse_search_results(raw_html: str) -> list[dict]:
     tree = HTMLParser(raw_html)
+    for s in tree.css("style"):
+        s.decompose()
     page_city = _extract_page_city(tree)
     prerendered_state = _parse_prerendered_state(tree)
     card_listings = _parse_card_listings(tree)
@@ -88,49 +90,69 @@ def _parse_card_listings(tree: HTMLParser) -> list[dict]:
     listings: list[dict] = []
     seen_ids: set[str] = set()
 
-    for card in tree.css("article[data-cy='l-card']"):
-        source_listing_id = (card.attributes.get("data-id") or "").strip()
-
-        link = card.css_first("a[href]")
+    for card in tree.css("[data-cy='l-card'], article[data-cy='l-card']"):
+        link = card.css_first("a[data-testid='card-title-link']") or card.css_first("a[href]")
         source_url = ""
         title = ""
         if link is not None:
             source_url = (link.attributes.get("href") or "").strip()
+            if source_url.startswith("/"):
+                source_url = f"https://www.olx.pl{source_url}"
             title = link.text(separator=" ", strip=True)
+
+        h4 = card.css_first("h4")
+        if h4 is not None:
+            title = h4.text(strip=True)
+        elif link is not None and link.attributes.get("aria-label"):
+            title = link.attributes.get("aria-label", "").strip()
+
+        source_listing_id = (card.attributes.get("data-id") or "").strip()
+        if not source_listing_id and source_url:
+            source_listing_id = _extract_olx_listing_id(source_url)
+        if not source_listing_id:
+            raw_card_id = (card.attributes.get("id") or "").strip()
+            if raw_card_id:
+                source_listing_id = f"olx-{raw_card_id}"
+
         if not source_listing_id or not source_url or source_listing_id in seen_ids:
             continue
         seen_ids.add(source_listing_id)
 
+        raw_id = (card.attributes.get("id") or "").strip()
+        source_numeric_id = f"olx-{raw_id}" if raw_id and raw_id.isdigit() else None
+
         seller_text = " ".join(
             node.text(separator=" ", strip=True) for node in card.css("span, p, div")
         ).strip()
+        seller_text = _clean_p3_text(seller_text)
         price_total, currency = _extract_price_fields(seller_text)
 
         area_sqm = _extract_area_sqm(seller_text)
         rooms = _extract_rooms_from_text(seller_text)
         price_per_sqm_source = _extract_price_per_sqm(seller_text)
 
-        listings.append(
-            {
-                "source": "olx",
-                "source_listing_id": source_listing_id,
-                "source_url": source_url,
-                "title": title,
-                "description": seller_text,
-                "price_total": price_total,
-                "price_per_sqm_source": price_per_sqm_source,
-                "currency": currency,
-                "area_sqm": area_sqm,
-                "rooms": rooms,
-                "district": None,
-                "city": None,
-                "municipality": None,
-                "location_approx": None,
-                "images": [],
-                "price_valid_until": None,
-                "seller_segment": _seller_segment_from_text(seller_text),
-            }
-        )
+        item = {
+            "source": "olx",
+            "source_listing_id": source_listing_id,
+            "source_url": source_url,
+            "title": title,
+            "description": seller_text,
+            "price_total": price_total,
+            "price_per_sqm_source": price_per_sqm_source,
+            "currency": currency,
+            "area_sqm": area_sqm,
+            "rooms": rooms,
+            "district": None,
+            "city": None,
+            "municipality": None,
+            "location_approx": None,
+            "images": [],
+            "price_valid_until": None,
+            "seller_segment": _seller_segment_from_text(seller_text),
+        }
+        if source_numeric_id:
+            item["source_numeric_id"] = source_numeric_id
+        listings.append(item)
 
     return listings
 
@@ -532,8 +554,8 @@ def _merge_card_and_jsonld(card_listings: list[dict], jsonld_listings: list[dict
             enriched["title"] = jsonld.get("title") or enriched.get("title")
             enriched["description"] = jsonld.get("description") or enriched.get("description")
             enriched["price_total"] = jsonld.get("price_total") or enriched.get("price_total")
-            enriched["price_per_sqm_source"] = (
-                jsonld.get("price_per_sqm_source") or enriched.get("price_per_sqm_source")
+            enriched["price_per_sqm_source"] = jsonld.get("price_per_sqm_source") or enriched.get(
+                "price_per_sqm_source"
             )
             enriched["currency"] = jsonld.get("currency") or enriched.get("currency")
             enriched["area_sqm"] = jsonld.get("area_sqm") or enriched.get("area_sqm")
@@ -554,52 +576,83 @@ def _merge_card_and_jsonld(card_listings: list[dict], jsonld_listings: list[dict
 
     return merged
 
+
 def _parse_prerendered_state(tree: HTMLParser) -> dict[str, dict]:
     for script in tree.css("script"):
         text = script.text()
         if text and "__PRERENDERED_STATE__" in text:
             match = re.search(r'__PRERENDERED_STATE__\s*=\s*"(.*?)";', text)
             if match:
+                raw_s = match.group(1)
+                state = None
                 try:
-                    raw_state = match.group(1).encode("utf-8").decode("unicode_escape")
-                    state = json.loads(raw_state)
-                    ads = state.get("listing", {}).get("listing", {}).get("ads", [])
-                    prerendered_data = {}
-                    for ad in ads:
-                        ad_id = str(ad.get("id"))
-                        if not ad_id:
-                            continue
-                        olx_id = f"olx-{ad_id}"
-                        
-                        params_raw = ad.get("params", [])
-                        params_dict = {}
-                        for p in params_raw:
-                            if "name" in p and "value" in p:
-                                params_dict[p["name"].casefold()] = str(p["value"]).strip()
-                                
-                        desc = ad.get("description", "").replace("<br />", "\n").strip()
-                        title = ad.get("title", "").strip()
-                        
-                        prerendered_data[olx_id] = {
-                            "detail_params": params_dict,
-                            "description": desc,
-                            "title": title
-                        }
-                    return prerendered_data
+                    decoded_js = json.loads('"' + raw_s + '"')
+                    state = json.loads(decoded_js)
                 except Exception:
-                    pass
+                    try:
+                        raw_state = raw_s.encode("utf-8").decode("unicode_escape")
+                        state = json.loads(raw_state)
+                    except Exception:
+                        pass
+                if not state or not isinstance(state, dict):
+                    continue
+
+                ads = state.get("listing", {}).get("listing", {}).get("ads", [])
+                prerendered_data = {}
+                for ad in ads:
+                    ad_id = str(ad.get("id") or "").strip()
+                    url = str(ad.get("url") or ad.get("urlPath") or "").strip()
+                    short_id = _extract_olx_listing_id(url)
+                    if not ad_id and not short_id:
+                        continue
+
+                    params_raw = ad.get("params", [])
+                    params_dict = {}
+                    for p in params_raw:
+                        if isinstance(p, dict) and "name" in p and "value" in p:
+                            params_dict[str(p["name"]).casefold()] = str(p["value"]).strip()
+
+                    desc = str(ad.get("description") or "").replace("<br />", "\n").strip()
+                    title = str(ad.get("title") or "").strip()
+                    is_business = ad.get("isBusiness")
+                    seller_segment = None
+                    if is_business is False:
+                        seller_segment = "private"
+                    elif is_business is True:
+                        seller_segment = "professional"
+
+                    entry = {
+                        "detail_params": params_dict,
+                        "description": desc,
+                        "title": title,
+                        "seller_segment": seller_segment,
+                    }
+                    if ad_id:
+                        prerendered_data[f"olx-{ad_id}"] = entry
+                        prerendered_data[ad_id] = entry
+                    if short_id:
+                        prerendered_data[short_id] = entry
+
+                return prerendered_data
     return {}
+
 
 def _merge_with_prerendered(merged: list[dict], prerendered_state: dict[str, dict]) -> list[dict]:
     for item in merged:
         listing_id = item.get("source_listing_id")
-        if listing_id and listing_id in prerendered_state:
-            data = prerendered_state[listing_id]
+        numeric_id = item.get("source_numeric_id")
+        data = prerendered_state.get(listing_id)
+        if not data and numeric_id:
+            data = prerendered_state.get(numeric_id)
+        if data:
             if data.get("description"):
                 item["description"] = data["description"]
             if data.get("title") and not item.get("title"):
                 item["title"] = data["title"]
-            
+            needs_seller = not item.get("seller_segment") or item.get("seller_segment") == "unknown"
+            if data.get("seller_segment") and needs_seller:
+                item["seller_segment"] = data["seller_segment"]
+
             # Use parser regexes on detail_params if available!
             params = data.get("detail_params", {})
             if params:
@@ -612,5 +665,7 @@ def _merge_with_prerendered(merged: list[dict], prerendered_state: dict[str, dic
                     item["floor"] = params.get("poziom") or params.get("piętro")
                 if not item.get("price_per_sqm_source"):
                     item["price_per_sqm_source"] = _extract_price_per_sqm(params.get("cena za m²"))
-                    
+
+        item.pop("source_numeric_id", None)
+
     return merged

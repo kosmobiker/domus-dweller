@@ -46,7 +46,7 @@ define run_olx_job
 				raw="data/raw/$(DATE)/olx_$(1)_$${seed}_page_$$i.html"; \
 				parsed="data/parsed/$(DATE)/olx_$(1)_$${seed}_page_$$i.json"; \
 				echo "[OLX $(1)] Fetch $$seed page $$i/$(PAGES)"; \
-				if ! curl $(FETCH_FLAGS) -A "$(UA)" -o "$$raw" "$${base_url}?page=$$i"; then \
+				if ! uv run python -m domus_dweller.sources.olx.fetch_search --url "$${base_url}?page=$$i" --output "$$raw"; then \
 					echo "[OLX $(1)] Fetch failed for $$seed page $$i, stopping this seed"; \
 					rm -f "$$raw" "$$parsed"; \
 					break; \
