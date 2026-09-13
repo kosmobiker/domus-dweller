@@ -4,7 +4,7 @@
       target_schema='silver',
       unique_key="source || '-' || source_listing_id || '-' || mode",
       strategy='check',
-      check_cols=['price_total'],
+      check_cols=['price_total', 'area_sqm', 'rooms', 'floor', 'district', 'city'],
       invalidate_hard_deletes=True
     )
 }}

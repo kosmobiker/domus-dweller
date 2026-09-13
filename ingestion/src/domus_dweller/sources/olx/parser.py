@@ -125,7 +125,13 @@ def _parse_card_listings(tree: HTMLParser) -> list[dict]:
             node.text(separator=" ", strip=True) for node in card.css("span, p, div")
         ).strip()
         seller_text = _clean_p3_text(seller_text)
-        price_total, currency = _extract_price_fields(seller_text)
+        price_node = card.css_first('[data-testid="ad-price"]')
+        if price_node:
+            price_total, currency = _extract_price_fields(price_node.text(strip=True))
+        else:
+            price_total, currency = _extract_price_fields(seller_text)
+        if price_total is None and seller_text:
+            price_total, currency = _extract_price_fields(seller_text)
 
         area_sqm = _extract_area_sqm(seller_text)
         rooms = _extract_rooms_from_text(seller_text)
@@ -146,6 +152,8 @@ def _parse_card_listings(tree: HTMLParser) -> list[dict]:
             "city": None,
             "municipality": None,
             "location_approx": None,
+            "latitude": None,
+            "longitude": None,
             "images": [],
             "price_valid_until": None,
             "seller_segment": _seller_segment_from_text(seller_text),
@@ -220,6 +228,8 @@ def _parse_jsonld_offers(tree: HTMLParser, *, page_city: str | None) -> list[dic
                     "city": page_city,
                     "municipality": page_city,
                     "location_approx": location_approx,
+                    "latitude": None,
+                    "longitude": None,
                     "images": images,
                     "price_valid_until": price_valid_until,
                     "seller_segment": _seller_segment_from_text(evidence),
@@ -242,14 +252,21 @@ def _extract_olx_listing_id(source_url: str) -> str:
 
 
 def _extract_price_fields(text: str) -> tuple[float | None, str | None]:
+    if not text:
+        return None, None
     normalized = text.replace("\xa0", " ")
-    match = re.search(r"(\d[\d\s]*)\s*(zł|pln)", normalized, flags=re.IGNORECASE)
+    match = re.search(
+        r"(\d[\d\s]*(?:[.,]\d+)?)\s*(zł|pln|zl)(?![\s]*(?:/|za\s*)m(?:²|2|\b))",
+        normalized,
+        flags=re.IGNORECASE,
+    )
     if not match:
         return None, None
-    digits = re.sub(r"\D", "", match.group(1))
-    if not digits:
+    raw_num = match.group(1).replace(" ", "").replace(",", ".")
+    try:
+        return float(raw_num), "PLN"
+    except ValueError:
         return None, None
-    return float(digits), "PLN"
 
 
 def _extract_district(area_served: object) -> str | None:
@@ -345,11 +362,17 @@ def _extract_area_sqm(area_text: str | None) -> float | None:
 def _extract_price_per_sqm(price_per_sqm_text: str | None) -> float | None:
     if not price_per_sqm_text:
         return None
-    normalized = price_per_sqm_text.replace("\xa0", " ").replace(",", ".")
-    match = re.search(r"(\d[\d\s]*(?:\.\d+)?)\s*(?:zł|pln)", normalized, flags=re.IGNORECASE)
+    normalized = price_per_sqm_text.replace("\xa0", " ")
+    match = re.search(
+        r"(\d[\d\s]*(?:[.,]\d+)?)\s*(?:zł|pln|zl)?[\s]*(?:/|za\s*)m(?:²|2|\b)",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    if match is None:
+        match = re.search(r"^\s*(\d[\d\s]*(?:[.,]\d+)?)\s*$", normalized)
     if match is None:
         return None
-    value = re.sub(r"\s+", "", match.group(1))
+    value = match.group(1).replace(" ", "").replace(",", ".")
     try:
         return float(value)
     except ValueError:
@@ -382,15 +405,19 @@ def _extract_rooms_from_text(text: str | None) -> float | None:
         return None
     normalized = text.replace("\xa0", " ").casefold()
     match = re.search(
-        r"(\d+(?:[.,]\d+)?)\s*(?:pok(?:oi|oje|ój|ojowe)?|pok\.)(?=\W|$)",
+        r"\b(\d{1,2}(?:[.,]\d+)?)\s*(?:pok(?:oi|oje|ój|ojowe)?|pok\.)(?=\W|$)",
         normalized,
     )
-    if match is None:
-        return None
-    try:
-        return float(match.group(1).replace(",", "."))
-    except ValueError:
-        return None
+    if match is not None:
+        try:
+            val = float(match.group(1).replace(",", "."))
+            if 1.0 <= val <= 20.0:
+                return val
+        except ValueError:
+            pass
+    if re.search(r"\b(kawalerka|kawalerk[aęi]|garsoniera|garsonier[aęi])\b", normalized):
+        return 1.0
+    return None
 
 
 def _extract_floor_from_text(text: str | None) -> str | None:
@@ -559,11 +586,22 @@ def _merge_card_and_jsonld(card_listings: list[dict], jsonld_listings: list[dict
             )
             enriched["currency"] = jsonld.get("currency") or enriched.get("currency")
             enriched["area_sqm"] = jsonld.get("area_sqm") or enriched.get("area_sqm")
-            enriched["rooms"] = jsonld.get("rooms") or enriched.get("rooms")
-            enriched["district"] = jsonld.get("district")
-            enriched["city"] = jsonld.get("city")
-            enriched["municipality"] = jsonld.get("municipality")
-            enriched["location_approx"] = jsonld.get("location_approx")
+            enriched["district"] = jsonld.get("district") or enriched.get("district")
+            enriched["city"] = jsonld.get("city") or enriched.get("city")
+            enriched["municipality"] = jsonld.get("municipality") or enriched.get("municipality")
+            enriched["location_approx"] = (
+                jsonld.get("location_approx") or enriched.get("location_approx")
+            )
+            enriched["latitude"] = (
+                jsonld.get("latitude")
+                if jsonld.get("latitude") is not None
+                else enriched.get("latitude")
+            )
+            enriched["longitude"] = (
+                jsonld.get("longitude")
+                if jsonld.get("longitude") is not None
+                else enriched.get("longitude")
+            )
             enriched["images"] = jsonld.get("images") or []
             enriched["price_valid_until"] = jsonld.get("price_valid_until")
         merged.append(enriched)
@@ -621,11 +659,43 @@ def _parse_prerendered_state(tree: HTMLParser) -> dict[str, dict]:
                     elif is_business is True:
                         seller_segment = "professional"
 
+                    price_obj = ad.get("price")
+                    price_total = None
+                    currency = None
+                    if isinstance(price_obj, dict):
+                        regular_price = price_obj.get("regularPrice")
+                        if isinstance(regular_price, dict):
+                            val = regular_price.get("value")
+                            if isinstance(val, (int, float)):
+                                price_total = float(val)
+                            curr_code = regular_price.get("currencyCode")
+                            if curr_code:
+                                currency = str(curr_code).strip()
+                        if price_total is None and price_obj.get("displayValue"):
+                            p_tot, curr = _extract_price_fields(str(price_obj["displayValue"]))
+                            price_total = p_tot
+                            currency = curr or currency
+
+                    loc = ad.get("location") or {}
+                    city = loc.get("cityName")
+                    district = loc.get("districtName")
+                    path_name = loc.get("pathName")
+                    map_obj = ad.get("map") or {}
+                    lat = map_obj.get("lat")
+                    lon = map_obj.get("lon")
+
                     entry = {
                         "detail_params": params_dict,
                         "description": desc,
                         "title": title,
                         "seller_segment": seller_segment,
+                        "price_total": price_total,
+                        "currency": currency,
+                        "city": str(city).strip() if city else None,
+                        "district": str(district).strip() if district else None,
+                        "location_approx": str(path_name).strip() if path_name else None,
+                        "latitude": float(lat) if isinstance(lat, (int, float)) else None,
+                        "longitude": float(lon) if isinstance(lon, (int, float)) else None,
                     }
                     if ad_id:
                         prerendered_data[f"olx-{ad_id}"] = entry
@@ -653,18 +723,47 @@ def _merge_with_prerendered(merged: list[dict], prerendered_state: dict[str, dic
             if data.get("seller_segment") and needs_seller:
                 item["seller_segment"] = data["seller_segment"]
 
+            if data.get("city") and not item.get("city"):
+                item["city"] = data["city"]
+            if data.get("district") and not item.get("district"):
+                item["district"] = data["district"]
+            if data.get("location_approx") and (
+                not item.get("location_approx") or item.get("location_approx") == item.get("city")
+            ):
+                item["location_approx"] = data["location_approx"]
+            if data.get("latitude") is not None and item.get("latitude") is None:
+                item["latitude"] = data["latitude"]
+            if data.get("longitude") is not None and item.get("longitude") is None:
+                item["longitude"] = data["longitude"]
+
+            if data.get("price_total") is not None and (
+                item.get("price_total") is None or item.get("price_total") < 100
+            ):
+                item["price_total"] = data["price_total"]
+                if data.get("currency"):
+                    item["currency"] = data["currency"]
+
+            if data.get("city") and not item.get("municipality"):
+                item["municipality"] = data["city"]
+
             # Use parser regexes on detail_params if available!
             params = data.get("detail_params", {})
             if params:
                 item["detail_params"] = params
-                if not item.get("area_sqm"):
-                    item["area_sqm"] = _extract_area_sqm(params.get("powierzchnia"))
-                if not item.get("rooms"):
-                    item["rooms"] = _extract_rooms(params.get("liczba pokoi"))
-                if not item.get("floor"):
-                    item["floor"] = params.get("poziom") or params.get("piętro")
-                if not item.get("price_per_sqm_source"):
-                    item["price_per_sqm_source"] = _extract_price_per_sqm(params.get("cena za m²"))
+                prerendered_area = _extract_area_sqm(params.get("powierzchnia"))
+                if prerendered_area is not None:
+                    item["area_sqm"] = prerendered_area
+                prerendered_rooms = _extract_rooms(params.get("liczba pokoi"))
+                if prerendered_rooms is not None:
+                    item["rooms"] = prerendered_rooms
+                prerendered_floor = params.get("poziom") or params.get("piętro")
+                if prerendered_floor:
+                    item["floor"] = prerendered_floor
+                prerendered_sqm = _extract_price_per_sqm(
+                    params.get("cena za m²") or params.get("price_per_m")
+                )
+                if prerendered_sqm is not None:
+                    item["price_per_sqm_source"] = prerendered_sqm
 
         item.pop("source_numeric_id", None)
 

@@ -105,6 +105,14 @@ def load_rows_to_motherduck(
         for row in rows
     ]
 
+    # Deduplicate normalized rows by primary key (source, source_listing_id, snapshot_date)
+    # in case listings appear across multiple search pages.
+    deduped_rows: dict[tuple[Any, Any, Any], dict[str, Any]] = {}
+    for row in normalized_rows:
+        key = (row.get("source"), row.get("source_listing_id"), row.get("snapshot_date"))
+        deduped_rows[key] = row
+    unique_rows = list(deduped_rows.values())
+
     import pyarrow as pa
 
     # Connect to MotherDuck or Local File
@@ -122,7 +130,7 @@ def load_rows_to_motherduck(
     # for unused fields (e.g., 'floor' being int vs str).
     filtered_rows = [
         {k: v for k, v in row.items() if k in table_columns}
-        for row in normalized_rows
+        for row in unique_rows
     ]
 
     # Use pyarrow to efficiently load the list of dicts
@@ -152,6 +160,6 @@ def load_rows_to_motherduck(
         f"SELECT {select_columns_sql} FROM arrow_table"
     )
 
-    count = len(normalized_rows)
+    count = len(unique_rows)
     con.close()
     return count
