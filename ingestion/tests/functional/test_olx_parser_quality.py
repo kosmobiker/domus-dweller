@@ -4,6 +4,7 @@ from domus_dweller.sources.olx.parser import (
     _extract_area_sqm,
     _extract_building_floors,
     _extract_floor_from_text,
+    _extract_price_fields,
     _extract_price_per_sqm,
     _extract_rooms,
     _extract_rooms_from_text,
@@ -323,3 +324,225 @@ def test_given_modern_div_cards_and_numeric_id_state_when_parsing_then_enriched(
     assert listings[0]["rooms"] == 2.0
     assert listings[0]["seller_segment"] == "private"
     assert "source_numeric_id" not in listings[0]
+
+
+def test_extract_price_fields_with_decimals_and_unit_prices() -> None:
+    # Standard formats
+    assert _extract_price_fields("639 000 zł") == (639000.0, "PLN")
+    assert _extract_price_fields("620 000 zl") == (620000.0, "PLN")
+    assert _extract_price_fields("1 099 000 zł") == (1099000.0, "PLN")
+    assert _extract_price_fields("500 PLN") == (500.0, "PLN")
+
+    # In sale ads, price per sqm often precedes total price
+    # Crucially, 13040.82 zł/m² must NOT split at the decimal into 82.0 zł
+    assert _extract_price_fields("49 m² - 13040.82 zł/m² 639 000 zł") == (639000.0, "PLN")
+    assert _extract_price_fields("73,50 m² - 14952.38 zł/m² 1 099 000 zł") == (1099000.0, "PLN")
+    assert _extract_price_fields("54 m² - 12500 zł/m² 675 000 zł") == (675000.0, "PLN")
+
+    # Pure unit prices without total price must not be treated as total price
+    assert _extract_price_fields("13040.82 zł/m²") == (None, None)
+    assert _extract_price_fields("12500 zł/m2") == (None, None)
+    assert _extract_price_fields("15000 zł za m²") == (None, None)
+
+
+def test_extract_price_per_sqm_distinguishes_unit_and_total_price() -> None:
+    # Must NOT extract total price as price per sqm
+    assert _extract_price_per_sqm("639 000 zł") is None
+    assert _extract_price_per_sqm("1 099 000 zł do negocjacji") is None
+
+    # Must extract unit price when combined with total price
+    assert _extract_price_per_sqm("49 m² - 13040.82 zł/m² 639 000 zł") == 13040.82
+    assert _extract_price_per_sqm("639 000 zł 49 m² - 13040.82 zł/m²") == 13040.82
+    assert _extract_price_per_sqm("54 m² - 12500 zł/m² 675 000 zł") == 12500.0
+
+    # Explicit unit price strings from params
+    assert _extract_price_per_sqm("16966.02 zł/m²") == 16966.02
+    assert _extract_price_per_sqm("100 zł/m²") == 100.0
+    assert _extract_price_per_sqm("12 500 zł/m²") == 12500.0
+    assert _extract_price_per_sqm("16966.02") == 16966.02
+
+
+def test_given_sale_card_with_price_per_sqm_when_parsing_then_extracted_accurately() -> None:
+    raw_html = """
+    <html><body>
+      <div data-cy="l-card" id="1064509351">
+        <a data-testid="card-title-link" href="/d/oferta/krakow-bronowice-CID3-ID1a2zwF.html">
+          <h4>Kraków Bronowice sprzedaż mieszkania</h4>
+        </a>
+        <p data-testid="ad-price">639 000 zł</p>
+        <span class="css-h59g4b">49 m² - 13040.82 zł/m²</span>
+      </div>
+    </body></html>
+    """
+    listings = parse_search_results(raw_html)
+    assert len(listings) == 1
+    assert listings[0]["price_total"] == 639000.0
+    assert listings[0]["currency"] == "PLN"
+    assert listings[0]["price_per_sqm_source"] == 13040.82
+    assert listings[0]["area_sqm"] == 49.0
+
+
+def test_given_prerendered_state_with_price_when_parsing_then_enriched() -> None:
+    state_dict = {
+        "listing": {
+            "listing": {
+                "ads": [
+                    {
+                        "id": 1064310626,
+                        "url": "https://www.olx.pl/d/oferta/okazja-CID3-ID4AKsb.html",
+                        "title": "OKAZJA gotowe",
+                        "price": {
+                            "regularPrice": {
+                                "value": 699000,
+                                "currencyCode": "PLN",
+                            },
+                            "displayValue": "699 000 zł",
+                        },
+                        "params": [
+                            {"name": "Powierzchnia", "value": "41.2 m²"},
+                            {"name": "Cena za m²", "value": "16966.02 zł/m²"},
+                        ],
+                    }
+                ]
+            }
+        }
+    }
+    state_json = json.dumps(state_dict).replace('"', '\\"')
+    raw_html = f"""
+    <html><body>
+      <div data-cy="l-card" id="1064310626">
+        <a data-testid="card-title-link" href="/d/oferta/okazja-CID3-ID4AKsb.html">
+          <h4>OKAZJA gotowe</h4>
+        </a>
+        <p data-testid="ad-price">699 000 zł</p>
+        <span>41,20 m² - 16966.02 zł/m²</span>
+      </div>
+      <script>
+        window.__PRERENDERED_STATE__ = "{state_json}";
+      </script>
+    </body></html>
+    """
+    listings = parse_search_results(raw_html)
+    assert len(listings) == 1
+    assert listings[0]["price_total"] == 699000.0
+    assert listings[0]["currency"] == "PLN"
+    assert listings[0]["price_per_sqm_source"] == 16966.02
+
+
+def test_given_prerendered_display_value_when_card_has_no_price_then_fills_price() -> None:
+    state_dict = {
+        "listing": {
+            "listing": {
+                "ads": [
+                    {
+                        "id": 12345,
+                        "url": "https://www.olx.pl/d/oferta/test-CID3-ID12345.html",
+                        "price": {
+                            "displayValue": "550 000 zł",
+                        },
+                    }
+                ]
+            }
+        }
+    }
+    state_json = json.dumps(state_dict).replace('"', '\\"')
+    raw_html = f"""
+    <html><body>
+      <div data-cy="l-card" id="12345">
+        <a data-testid="card-title-link" href="/d/oferta/test-CID3-ID12345.html">
+          <h4>Title</h4>
+        </a>
+      </div>
+      <script>
+        window.__PRERENDERED_STATE__ = "{state_json}";
+      </script>
+    </body></html>
+    """
+    listings = parse_search_results(raw_html)
+    assert len(listings) == 1
+    assert listings[0]["price_total"] == 550000.0
+    assert listings[0]["currency"] == "PLN"
+
+
+def test_given_prerendered_state_with_location_and_map_when_parsing_then_enriched() -> None:
+    state_dict = {
+        "listing": {
+            "listing": {
+                "ads": [
+                    {
+                        "id": 88888,
+                        "url": "https://www.olx.pl/d/oferta/geo-CID3-ID88888.html",
+                        "location": {
+                            "cityName": "Kraków",
+                            "districtName": "Krowodrza",
+                            "pathName": "Małopolskie, Kraków, Krowodrza",
+                        },
+                        "map": {
+                            "lat": 50.075,
+                            "lon": 19.925,
+                        },
+                    }
+                ]
+            }
+        }
+    }
+    state_json = json.dumps(state_dict).replace('"', '\\"')
+    raw_html = f"""
+    <html><body>
+      <div data-cy="l-card" id="88888">
+        <a data-testid="card-title-link" href="/d/oferta/geo-CID3-ID88888.html">
+          <h4>Mieszkanie Krowodrza</h4>
+        </a>
+      </div>
+      <script>
+        window.__PRERENDERED_STATE__ = "{state_json}";
+      </script>
+    </body></html>
+    """
+    listings = parse_search_results(raw_html)
+    assert len(listings) == 1
+    assert listings[0]["city"] == "Kraków"
+    assert listings[0]["district"] == "Krowodrza"
+    assert listings[0]["location_approx"] == "Małopolskie, Kraków, Krowodrza"
+    assert listings[0]["latitude"] == 50.075
+    assert listings[0]["longitude"] == 19.925
+
+
+def test_given_year_in_card_title_and_kawalerka_in_params_when_parsing_then_rooms_is_one() -> None:
+    state_dict = {
+        "listing": {
+            "listing": {
+                "ads": [
+                    {
+                        "id": 191919,
+                        "url": "https://www.olx.pl/d/oferta/pokoj-CID3-ID191919.html",
+                        "params": [
+                            {"name": "Liczba pokoi", "value": "Kawalerka"},
+                            {"name": "Powierzchnia", "value": "12 m²"},
+                        ],
+                    }
+                ]
+            }
+        }
+    }
+    state_json = json.dumps(state_dict).replace('"', '\\"')
+    raw_html = f"""
+    <html><body>
+      <div data-cy="l-card" id="191919">
+        <a data-testid="card-title-link" href="/d/oferta/pokoj-CID3-ID191919.html">
+          <h4>Pokój do wynajęcia</h4>
+        </a>
+        <p>Kraków - 12 marca 2026 Pokój do wynajęcia</p>
+      </div>
+      <script>
+        window.__PRERENDERED_STATE__ = "{state_json}";
+      </script>
+    </body></html>
+    """
+    listings = parse_search_results(raw_html)
+    assert len(listings) == 1
+    assert listings[0]["rooms"] == 1.0
+
+
+
+

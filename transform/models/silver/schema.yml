@@ -12,6 +12,15 @@ models:
       - name: mode
         tests:
           - not_null
+      - name: first_seen_at
+        tests:
+          - not_null
+      - name: last_seen_at
+        tests:
+          - not_null
+      - name: is_active
+        tests:
+          - not_null
 
   - name: listing_current
     columns:
@@ -24,3 +33,15 @@ models:
       - name: price_total
         tests:
           - not_null
+      - name: area_sqm
+        tests:
+          - not_null
+      - name: city
+        tests:
+          - not_null
+      - name: seller_segment
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['private', 'professional', 'unknown']
