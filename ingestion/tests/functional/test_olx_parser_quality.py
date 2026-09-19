@@ -544,5 +544,46 @@ def test_given_year_in_card_title_and_kawalerka_in_params_when_parsing_then_room
     assert listings[0]["rooms"] == 1.0
 
 
-
+def test_given_breadcrumb_when_content_location_missing_then_city_extracted() -> None:
+    breadcrumb_data = {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+            {"@type": "ListItem", "position": 1, "name": "Strona główna"},
+            {"@type": "ListItem", "position": 2, "name": "Nieruchomości"},
+            {"@type": "ListItem", "position": 3, "name": "Mieszkania"},
+            {"@type": "ListItem", "position": 4, "name": "Wynajem"},
+            {"@type": "ListItem", "position": 5, "name": "Wynajem - Małopolskie"},
+            {"@type": "ListItem", "position": 6, "name": "Wynajem - Kraków"},
+        ],
+    }
+    offers_data = {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "offers": {
+            "@type": "AggregateOffer",
+            "offers": [
+                {
+                    "@type": "Offer",
+                    "url": "https://www.olx.pl/d/oferta/mieszkanie-krakow-CID3-ID999.html",
+                    "name": "Mieszkanie w centrum",
+                    "price": 2500,
+                    "priceCurrency": "PLN",
+                }
+            ],
+        },
+    }
+    raw_html = f"""
+    <html><body>
+      <script type="application/ld+json">
+        {json.dumps(breadcrumb_data)}
+      </script>
+      <script type="application/ld+json">
+        {json.dumps(offers_data)}
+      </script>
+    </body></html>
+    """
+    listings = parse_search_results(raw_html)
+    assert len(listings) == 1
+    assert listings[0]["city"] == "Kraków"
 
