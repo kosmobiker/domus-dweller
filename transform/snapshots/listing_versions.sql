@@ -1,3 +1,4 @@
+-- depends_on: {{ ref('stg_bronze_listings') }}
 {% snapshot listing_versions %}
 {{
     config(

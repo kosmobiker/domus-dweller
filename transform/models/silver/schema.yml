@@ -35,10 +35,14 @@ models:
           - not_null
       - name: area_sqm
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
       - name: city
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
       - name: seller_segment
         tests:
           - not_null

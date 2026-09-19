@@ -1,3 +1,4 @@
+-- depends_on: {{ ref('listing_versions') }}
 {{ config(
     materialized='table'
 ) }}

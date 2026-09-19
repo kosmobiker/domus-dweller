@@ -534,6 +534,7 @@ def _extract_detail_title(tree: HTMLParser) -> str | None:
 
 
 def _extract_page_city(tree: HTMLParser) -> str | None:
+    breadcrumb_city = None
     for script in tree.css("script[type='application/ld+json']"):
         raw_json = (script.text() or "").strip()
         if not raw_json:
@@ -547,7 +548,29 @@ def _extract_page_city(tree: HTMLParser) -> str | None:
             city = str(content_location.get("name", "")).strip()
             if city:
                 return city
-    return None
+
+        if payload.get("@type") == "BreadcrumbList":
+            items = payload.get("itemListElement", [])
+            for item in reversed(items):
+                name = str(item.get("name", "")).strip()
+                if " - " in name:
+                    candidate = name.split(" - ")[-1].strip()
+                    if candidate and candidate not in {"Małopolskie", "Polska"}:
+                        breadcrumb_city = candidate
+                        break
+                elif name in {
+                    "Kraków",
+                    "Wieliczka",
+                    "Skawina",
+                    "Niepołomice",
+                    "Zabierzów",
+                    "Zielonki",
+                    "Świątniki Górne",
+                }:
+                    breadcrumb_city = name
+                    break
+
+    return breadcrumb_city
 
 
 def _build_location_approx(*, city: str | None, district: str | None) -> str | None:
