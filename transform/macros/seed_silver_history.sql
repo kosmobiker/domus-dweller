@@ -3,78 +3,80 @@
         CREATE SCHEMA IF NOT EXISTS silver;
 
         CREATE OR REPLACE TABLE silver.listing_versions AS
-        WITH combined AS (
+        WITH rent_raw AS (
             SELECT 
                 source,
                 source_listing_id,
                 mode,
                 ingested_at,
-                (raw_json::JSON)->>'title' as title,
-                CAST((raw_json::JSON)->>'price_total' AS DOUBLE) as price_total,
-                COALESCE(
-                    CAST((raw_json::JSON)->>'price_per_sqm_source' AS DOUBLE),
-                    ROUND(CAST((raw_json::JSON)->>'price_total' AS DOUBLE) / NULLIF(CAST((raw_json::JSON)->>'area_sqm' AS DOUBLE), 0), 2)
-                ) as price_per_sqm,
-                (raw_json::JSON)->>'currency' as currency,
-                CAST((raw_json::JSON)->>'area_sqm' AS DOUBLE) as area_sqm,
-                CAST((raw_json::JSON)->>'rooms' AS DOUBLE) as rooms,
-                (raw_json::JSON)->>'floor' as floor,
-                COALESCE((raw_json::JSON)->>'seller_segment', 'unknown') as seller_segment,
-                COALESCE(
-                    (raw_json::JSON)->>'city',
-                    (raw_json::JSON)->>'municipality',
-                    CASE
-                        WHEN (raw_json::JSON)->>'location_approx' ILIKE '%kraków%' OR (raw_json::JSON)->>'location_approx' ILIKE '%krakow%' THEN 'Kraków'
-                        WHEN (raw_json::JSON)->>'location_approx' ILIKE '%wieliczka%' THEN 'Wieliczka'
-                        WHEN (raw_json::JSON)->>'location_approx' ILIKE '%skawina%' THEN 'Skawina'
-                        WHEN (raw_json::JSON)->>'location_approx' ILIKE '%niepołomice%' OR (raw_json::JSON)->>'location_approx' ILIKE '%niepolomice%' THEN 'Niepołomice'
-                        WHEN (raw_json::JSON)->>'location_approx' ILIKE '%zabierzów%' OR (raw_json::JSON)->>'location_approx' ILIKE '%zabierzow%' THEN 'Zabierzów'
-                        WHEN (raw_json::JSON)->>'location_approx' ILIKE '%zielonki%' THEN 'Zielonki'
-                        WHEN (raw_json::JSON)->>'location_approx' ILIKE '%świątniki%' OR (raw_json::JSON)->>'location_approx' ILIKE '%swiatniki%' THEN 'Świątniki Górne'
-                        WHEN (raw_json::JSON)->>'district' IN (
-                            'Stare Miasto', 'Grzegórzki', 'Prądnik Czerwony', 'Prądnik Biały',
-                            'Krowodrza', 'Bronowice', 'Zwierzyniec', 'Dębniki',
-                            'Łagiewniki-Borek Fałęcki', 'Swoszowice', 'Podgórze Duchackie',
-                            'Bieżanów-Prokocim', 'Podgórze', 'Czyżyny', 'Mistrzejowice',
-                            'Bieńczyce', 'Wzgórza Krzesławickie', 'Nowa Huta'
-                        ) THEN 'Kraków'
-                        ELSE NULL
-                    END
-                ) as city,
-                (raw_json::JSON)->>'district' as district,
-                (raw_json::JSON)->>'location_approx' as location_approx,
-                CAST((raw_json::JSON)->>'latitude' AS DOUBLE) as latitude,
-                CAST((raw_json::JSON)->>'longitude' AS DOUBLE) as longitude
+                raw_json::JSON as j
             FROM bronze.rent_bronze
-            UNION ALL
+        ),
+        sale_raw AS (
             SELECT 
                 source,
                 source_listing_id,
                 mode,
                 ingested_at,
-                (raw_json::JSON)->>'title' as title,
-                CAST((raw_json::JSON)->>'price_total' AS DOUBLE) as price_total,
+                raw_json::JSON as j
+            FROM bronze.sale_bronze
+        ),
+        combined_raw AS (
+            SELECT * FROM rent_raw
+            UNION ALL
+            SELECT * FROM sale_raw
+        ),
+        extracted AS (
+            SELECT
+                source,
+                source_listing_id,
+                mode,
+                ingested_at,
+                j->>'title' as title,
+                CAST(j->>'price_total' AS DOUBLE) as price_total,
+                CAST(j->>'price_per_sqm_source' AS DOUBLE) as price_per_sqm_source,
+                j->>'currency' as currency,
+                CAST(j->>'area_sqm' AS DOUBLE) as area_sqm,
+                CAST(j->>'rooms' AS DOUBLE) as rooms,
+                j->>'floor' as floor,
+                COALESCE(j->>'seller_segment', 'unknown') as seller_segment,
+                j->>'city' as json_city,
+                j->>'municipality' as json_municipality,
+                j->>'district' as district,
+                j->>'location_approx' as location_approx,
+                CAST(j->>'latitude' AS DOUBLE) as latitude,
+                CAST(j->>'longitude' AS DOUBLE) as longitude
+            FROM combined_raw
+        ),
+        normalized AS (
+            SELECT
+                source,
+                source_listing_id,
+                mode,
+                ingested_at,
+                title,
+                price_total,
                 COALESCE(
-                    CAST((raw_json::JSON)->>'price_per_sqm_source' AS DOUBLE),
-                    ROUND(CAST((raw_json::JSON)->>'price_total' AS DOUBLE) / NULLIF(CAST((raw_json::JSON)->>'area_sqm' AS DOUBLE), 0), 2)
+                    price_per_sqm_source,
+                    ROUND(price_total / NULLIF(area_sqm, 0), 2)
                 ) as price_per_sqm,
-                (raw_json::JSON)->>'currency' as currency,
-                CAST((raw_json::JSON)->>'area_sqm' AS DOUBLE) as area_sqm,
-                CAST((raw_json::JSON)->>'rooms' AS DOUBLE) as rooms,
-                (raw_json::JSON)->>'floor' as floor,
-                COALESCE((raw_json::JSON)->>'seller_segment', 'unknown') as seller_segment,
+                currency,
+                area_sqm,
+                rooms,
+                floor,
+                seller_segment,
                 COALESCE(
-                    (raw_json::JSON)->>'city',
-                    (raw_json::JSON)->>'municipality',
+                    json_city,
+                    json_municipality,
                     CASE
-                        WHEN (raw_json::JSON)->>'location_approx' ILIKE '%kraków%' OR (raw_json::JSON)->>'location_approx' ILIKE '%krakow%' THEN 'Kraków'
-                        WHEN (raw_json::JSON)->>'location_approx' ILIKE '%wieliczka%' THEN 'Wieliczka'
-                        WHEN (raw_json::JSON)->>'location_approx' ILIKE '%skawina%' THEN 'Skawina'
-                        WHEN (raw_json::JSON)->>'location_approx' ILIKE '%niepołomice%' OR (raw_json::JSON)->>'location_approx' ILIKE '%niepolomice%' THEN 'Niepołomice'
-                        WHEN (raw_json::JSON)->>'location_approx' ILIKE '%zabierzów%' OR (raw_json::JSON)->>'location_approx' ILIKE '%zabierzow%' THEN 'Zabierzów'
-                        WHEN (raw_json::JSON)->>'location_approx' ILIKE '%zielonki%' THEN 'Zielonki'
-                        WHEN (raw_json::JSON)->>'location_approx' ILIKE '%świątniki%' OR (raw_json::JSON)->>'location_approx' ILIKE '%swiatniki%' THEN 'Świątniki Górne'
-                        WHEN (raw_json::JSON)->>'district' IN (
+                        WHEN location_approx ILIKE '%kraków%' OR location_approx ILIKE '%krakow%' THEN 'Kraków'
+                        WHEN location_approx ILIKE '%wieliczka%' THEN 'Wieliczka'
+                        WHEN location_approx ILIKE '%skawina%' THEN 'Skawina'
+                        WHEN location_approx ILIKE '%niepołomice%' OR location_approx ILIKE '%niepolomice%' THEN 'Niepołomice'
+                        WHEN location_approx ILIKE '%zabierzów%' OR location_approx ILIKE '%zabierzow%' THEN 'Zabierzów'
+                        WHEN location_approx ILIKE '%zielonki%' THEN 'Zielonki'
+                        WHEN location_approx ILIKE '%świątniki%' OR location_approx ILIKE '%swiatniki%' THEN 'Świątniki Górne'
+                        WHEN district IN (
                             'Stare Miasto', 'Grzegórzki', 'Prądnik Czerwony', 'Prądnik Biały',
                             'Krowodrza', 'Bronowice', 'Zwierzyniec', 'Dębniki',
                             'Łagiewniki-Borek Fałęcki', 'Swoszowice', 'Podgórze Duchackie',
@@ -84,11 +86,11 @@
                         ELSE NULL
                     END
                 ) as city,
-                (raw_json::JSON)->>'district' as district,
-                (raw_json::JSON)->>'location_approx' as location_approx,
-                CAST((raw_json::JSON)->>'latitude' AS DOUBLE) as latitude,
-                CAST((raw_json::JSON)->>'longitude' AS DOUBLE) as longitude
-            FROM bronze.sale_bronze
+                district,
+                location_approx,
+                latitude,
+                longitude
+            FROM extracted
         ),
         chronological_chain AS (
             SELECT 
@@ -97,7 +99,7 @@
                     PARTITION BY source, mode, source_listing_id 
                     ORDER BY ingested_at ASC
                 ) as prev_price
-            FROM combined
+            FROM normalized
         ),
         filtered_changes AS (
             SELECT * FROM chronological_chain 
