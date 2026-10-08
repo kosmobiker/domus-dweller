@@ -587,3 +587,47 @@ def test_given_breadcrumb_when_content_location_missing_then_city_extracted() ->
     assert len(listings) == 1
     assert listings[0]["city"] == "Kraków"
 
+
+def test_given_missing_district_when_title_has_district_then_extracted_safely() -> None:
+    test_titles = [
+        ("Słoneczne 3 pokoje z zabudowaną loggią | Krowodrza", "Krowodrza", "Kraków"),
+        ("47 m² na Krowodrzy | Od osoby prywatnej | Cena do negocjacji", "Krowodrza", "Kraków"),
+        ("2 pokoje Prądnik Czerwony", "Prądnik Czerwony", "Kraków"),
+        ("Lux! Zabłocie! Klimeckiego, Salsa", "Podgórze", "Kraków"),
+        ("Os. Piastów | kawalerka | od zaraz | 16,88m2!", "Mistrzejowice", "Kraków"),
+        ("Nowoczesny segment Wieliczka", "Wieliczka", "Wieliczka"),
+    ]
+    for idx, (title, expected_district, expected_city) in enumerate(test_titles):
+        raw_html = f"""
+        <html><body>
+          <div data-cy="l-card" id="card-{idx}">
+            <a data-testid="card-title-link" href="/d/oferta/listing-{idx}-CID3-ID{idx}.html">
+              <h4>{title}</h4>
+            </a>
+            <p data-testid="ad-price">500 000 zł</p>
+          </div>
+        </body></html>
+        """
+        listings = parse_search_results(raw_html)
+        assert len(listings) == 1
+        assert listings[0]["district"] == expected_district, f"Failed for title: {title}"
+        assert listings[0]["city"] == expected_city, f"Failed city for title: {title}"
+        assert expected_district in listings[0]["location_approx"]
+
+
+def test_given_street_name_or_ambiguous_text_when_parsing_then_district_remains_none() -> None:
+    raw_html = """
+    <html><body>
+      <div data-cy="l-card" id="card-street">
+        <a data-testid="card-title-link" href="/d/oferta/centrum-CID3-ID123.html">
+          <h4>Centrum/Krowoderska55/mieszkanie/lokal</h4>
+        </a>
+        <p data-testid="ad-price">500 000 zł</p>
+      </div>
+    </body></html>
+    """
+    listings = parse_search_results(raw_html)
+    assert len(listings) == 1
+    assert listings[0]["district"] is None
+
+

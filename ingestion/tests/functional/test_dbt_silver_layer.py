@@ -216,3 +216,92 @@ def test_dbt_silver_layer(tmp_path):
     assert "999" in current_ids, "Active listing 999 should be in listing_current"
     con.close()
 
+
+def test_silver_enriches_missing_districts_for_rent_and_sale(tmp_path):
+    """Verify Silver dbt layer extracts district from title for both rent and sale."""
+    db_path = str(tmp_path / "test_enrich.duckdb")
+    bootstrap_motherduck(database=db_path, token="local")
+
+    # Rent listing with district in title
+    rent_json = json.dumps({
+        "title": "Słoneczne 3 pokoje z zabudowaną loggią | Krowodrza",
+        "price_total": 3000,
+        "price_per_sqm_source": 50.0,
+        "currency": "PLN",
+        "area_sqm": 60.0,
+        "rooms": 3,
+        "city": None,
+        "district": None,
+        "location_approx": None,
+        "seller_segment": "unknown",
+    })
+
+    # Sale listing with subdistrict (Zabłocie -> Podgórze) in title
+    sale_json = json.dumps({
+        "title": "Lux! Zabłocie! Klimeckiego, Salsa",
+        "price_total": 850000,
+        "price_per_sqm_source": 17000.0,
+        "currency": "PLN",
+        "area_sqm": 50.0,
+        "rooms": 2,
+        "city": None,
+        "district": None,
+        "location_approx": None,
+        "seller_segment": "unknown",
+    })
+
+    # Sale listing with street name (should not extract false positive)
+    street_sale_json = json.dumps({
+        "title": "Centrum/Krowoderska55/mieszkanie/lokal",
+        "price_total": 1400000,
+        "price_per_sqm_source": 20848.85,
+        "currency": "PLN",
+        "area_sqm": 67.15,
+        "rooms": None,
+        "city": None,
+        "district": None,
+        "location_approx": None,
+        "seller_segment": "unknown",
+    })
+
+    con = duckdb.connect(db_path)
+    _insert_bronze_row(con, "rent-1", "rent", "2026-08-01", rent_json, table="rent_bronze")
+    _insert_bronze_row(con, "sale-1", "sale", "2026-08-01", sale_json, table="sale_bronze")
+    _insert_bronze_row(con, "sale-2", "sale", "2026-08-01", street_sale_json, table="sale_bronze")
+    con.close()
+
+    env = os.environ.copy()
+    env["DEV_DB"] = db_path
+    cwd = os.path.join(os.getcwd(), "transform")
+    subprocess.run(["uv", "run", "dbt", "deps"], check=True, cwd=cwd, env=env)
+    subprocess.run(["uv", "run", "dbt", "build", "--target", "dev"], check=True, cwd=cwd, env=env)
+
+    con = duckdb.connect(db_path)
+    rows = {
+        row[0]: (row[1], row[2], row[3])
+        for row in con.execute(
+            "SELECT source_listing_id, district, city, location_approx "
+            "FROM silver.listing_current"
+        ).fetchall()
+    }
+    con.close()
+
+    # rent-1
+    assert "rent-1" in rows
+    # Expected: district="Krowodrza", city="Kraków"
+    row_rent = rows["rent-1"]
+    assert row_rent[0] == "Krowodrza"
+    assert row_rent[1] == "Kraków"
+
+    # sale-1
+    assert "sale-1" in rows
+    row_sale = rows["sale-1"]
+    assert row_sale[0] == "Podgórze"
+    assert row_sale[1] == "Kraków"
+
+    # sale-2 (Krowoderska street - should not match Krowodrza)
+    assert "sale-2" in rows
+    row_street = rows["sale-2"]
+    assert row_street[0] is None
+
+
