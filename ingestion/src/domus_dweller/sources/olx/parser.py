@@ -33,7 +33,8 @@ def parse_search_results(raw_html: str) -> list[dict]:
     card_listings = _parse_card_listings(tree)
     jsonld_listings = _parse_jsonld_offers(tree, page_city=page_city)
     merged = _merge_card_and_jsonld(card_listings, jsonld_listings)
-    return _merge_with_prerendered(merged, prerendered_state)
+    merged = _merge_with_prerendered(merged, prerendered_state)
+    return _enrich_missing_districts(merged, page_city=page_city)
 
 
 def parse_detail_page(raw_html: str) -> dict:
@@ -791,3 +792,134 @@ def _merge_with_prerendered(merged: list[dict], prerendered_state: dict[str, dic
         item.pop("source_numeric_id", None)
 
     return merged
+
+
+KRAKOW_DISTRICTS: frozenset[str] = frozenset({
+    "Stare Miasto",
+    "Grzegórzki",
+    "Prądnik Czerwony",
+    "Prądnik Biały",
+    "Krowodrza",
+    "Bronowice",
+    "Zwierzyniec",
+    "Dębniki",
+    "Łagiewniki-Borek Fałęcki",
+    "Swoszowice",
+    "Podgórze Duchackie",
+    "Bieżanów-Prokocim",
+    "Podgórze",
+    "Czyżyny",
+    "Mistrzejowice",
+    "Bieńczyce",
+    "Wzgórza Krzesławickie",
+    "Nowa Huta",
+})
+
+NEARBY_MUNICIPALITIES: frozenset[str] = frozenset({
+    "Wieliczka",
+    "Skawina",
+    "Niepołomice",
+    "Zabierzów",
+    "Zielonki",
+    "Świątniki Górne",
+})
+
+_WORD_BOUNDARY_PREFIX = r"(?i)(?:^|[^a-zA-Z0-9ąćęłńóśźżĄĆĘŁŃÓŚŹŻ])"
+_WORD_BOUNDARY_SUFFIX = r"(?:$|[^a-zA-Z0-9ąćęłńóśźżĄĆĘŁŃÓŚŹŻ])"
+
+
+def _compile_district_rule(core_pattern: str, district: str) -> tuple[re.Pattern[str], str]:
+    return (
+        re.compile(f"{_WORD_BOUNDARY_PREFIX}{core_pattern}{_WORD_BOUNDARY_SUFFIX}"),
+        district,
+    )
+
+
+DISTRICT_EXTRACTION_RULES: list[tuple[re.Pattern[str], str]] = [
+    _compile_district_rule(r"pr[aą]dnik(?:u|a|iem)?\s+czerwon(?:y|ym|ego)", "Prądnik Czerwony"),
+    _compile_district_rule(r"pr[aą]dnik(?:u|a|iem)?\s+bia[lł](?:y|ym|ego)", "Prądnik Biały"),
+    _compile_district_rule(r"podg[oó]rz(?:e|u|a|em)\s+duchack(?:ie|im|iego)", "Podgórze Duchackie"),
+    _compile_district_rule(r"wol[aię]?\s+duchack[a-ząćęłńóśźż]*", "Podgórze Duchackie"),
+    _compile_district_rule(r"piask(?:i|ach)\s+now(?:e|ych)", "Podgórze Duchackie"),
+    _compile_district_rule(r"kurdwan[oó]w(?:ie|a)?", "Podgórze Duchackie"),
+    _compile_district_rule(
+        r"star(?:e|ego|ym|emu)\s+(?:miast(?:o|a|u|em)|mie[sś]cie)", "Stare Miasto"
+    ),
+    _compile_district_rule(r"kleparz(?:u|a)?", "Stare Miasto"),
+    _compile_district_rule(r"kazimierz(?:u|a)?", "Stare Miasto"),
+    _compile_district_rule(r"[lł]agiewnik(?:i|ach|ami|om)?", "Łagiewniki-Borek Fałęcki"),
+    _compile_district_rule(
+        r"(?:borek|borku|borka)\s+fa[lł][eę]ck(?:i|im|iego)", "Łagiewniki-Borek Fałęcki"
+    ),
+    _compile_district_rule(r"bie[zż]an[oó]w(?:ie)?", "Bieżanów-Prokocim"),
+    _compile_district_rule(r"prokocim(?:iu|ia|iem)?", "Bieżanów-Prokocim"),
+    _compile_district_rule(r"koz[lł][oó]w(?:ek|ku)", "Bieżanów-Prokocim"),
+    _compile_district_rule(
+        r"wzg[oó]rz(?:a|ach|om|ami)?\s+krzes[lł]awick(?:ie|ich|im)", "Wzgórza Krzesławickie"
+    ),
+    _compile_district_rule(r"now(?:a|ej|ą)\s+hu(?:ta|cie|tę|ty)", "Nowa Huta"),
+    _compile_district_rule(r"(?:star[aej]\s+)?krowodrz(?:a|y|ę|ą)", "Krowodrza"),
+    _compile_district_rule(r"[lł]obz[oó]w(?:ie)?", "Krowodrza"),
+    _compile_district_rule(r"bronowic(?:e|ach|ami|om)?", "Bronowice"),
+    _compile_district_rule(r"zwierzyn(?:iec|cu|ca|cem)", "Zwierzyniec"),
+    _compile_district_rule(r"wol[aię]?\s+justowsk[a-ząćęłńóśźż]*", "Zwierzyniec"),
+    _compile_district_rule(r"salwator(?:ze|a)?", "Zwierzyniec"),
+    _compile_district_rule(r"d[eę]bnik(?:i|ach|ami|om)?", "Dębniki"),
+    _compile_district_rule(r"ruczaj(?:u|em)?", "Dębniki"),
+    _compile_district_rule(r"podwawelskie(?:go|mu)?", "Dębniki"),
+    _compile_district_rule(r"(?:star(?:e|ym)\s+)?podg[oó]rz(?:e|u|a|em)", "Podgórze"),
+    _compile_district_rule(r"zab[lł]oci(?:e|u|a)", "Podgórze"),
+    _compile_district_rule(r"czy[zż]yn(?:y|ach|ami|om)?", "Czyżyny"),
+    _compile_district_rule(r"mistrzejowic(?:e|ach|ami|om)?", "Mistrzejowice"),
+    _compile_district_rule(r"os(?:\.|\s+iedle)?\s+piast[oó]w", "Mistrzejowice"),
+    _compile_district_rule(r"bie[nń]czyc(?:e|ach|ami|om)?", "Bieńczyce"),
+    _compile_district_rule(r"swoszowic(?:e|ach|ami|om)?", "Swoszowice"),
+    _compile_district_rule(r"grzeg[oó]rz(?:ki|kach|kami|ek|kom)", "Grzegórzki"),
+    _compile_district_rule(r"wieliczk(?:a|i|ce|ą)", "Wieliczka"),
+    _compile_district_rule(r"skawin(?:a|y|ie|ą)", "Skawina"),
+    _compile_district_rule(r"niepo[lł]omic(?:e|ach|ami|om)?", "Niepołomice"),
+    _compile_district_rule(r"zabierz[oó]w(?:ie)?", "Zabierzów"),
+    _compile_district_rule(r"zielonk(?:i|ach|ami|om)", "Zielonki"),
+    _compile_district_rule(r"[sś]wi[aą]tnik(?:i|ach)?\s+g[oó]rn(?:e|ych)", "Świątniki Górne"),
+]
+
+
+def extract_district_from_text(text: str | None) -> str | None:
+    if not text:
+        return None
+    for pattern, district in DISTRICT_EXTRACTION_RULES:
+        if pattern.search(text):
+            return district
+    return None
+
+
+def _enrich_missing_districts(listings: list[dict], *, page_city: str | None) -> list[dict]:
+    for item in listings:
+        district = item.get("district")
+        # If district is missing or is just the generic city name "Kraków"
+        if not district or district == "Kraków":
+            text_to_search = " ".join(
+                part for part in [item.get("location_approx"), item.get("title")] if part
+            )
+            inferred = extract_district_from_text(text_to_search)
+            if inferred:
+                item["district"] = inferred
+                if not item.get("city"):
+                    if inferred in KRAKOW_DISTRICTS:
+                        item["city"] = "Kraków"
+                    elif inferred in NEARBY_MUNICIPALITIES:
+                        item["city"] = inferred
+                    elif page_city:
+                        item["city"] = page_city
+                if not item.get("municipality"):
+                    item["municipality"] = item.get("city")
+                loc = item.get("location_approx")
+                if not loc or loc == item.get("city"):
+                    item["location_approx"] = _build_location_approx(
+                        city=item.get("city"), district=inferred
+                    )
+            elif not district and page_city and not item.get("city"):
+                item["city"] = page_city
+    return listings
+
+

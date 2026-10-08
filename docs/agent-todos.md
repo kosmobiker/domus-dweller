@@ -25,6 +25,7 @@ Current objective: start Gold/Analytics.
 - [x] Add normalization for high-value OLX params per mode (rent vs sale).
 - [x] Add parser regression fixtures for known noisy `detail_params` keys.
 - [x] **Urgent:** Fix parser coverage for `area_sqm`, `rooms`, `floor`, and `price_per_sqm` via parser-driven extraction.
+- [x] Safe extraction of missing `district` and `city` from title and location text for `rent` and `sale`.
 
 ## Active Backlog
 

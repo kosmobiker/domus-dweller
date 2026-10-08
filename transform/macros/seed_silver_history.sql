@@ -42,11 +42,17 @@
                 COALESCE(j->>'seller_segment', 'unknown') as seller_segment,
                 j->>'city' as json_city,
                 j->>'municipality' as json_municipality,
-                j->>'district' as district,
-                j->>'location_approx' as location_approx,
+                j->>'district' as raw_district,
+                j->>'location_approx' as raw_location_approx,
                 CAST(j->>'latitude' AS DOUBLE) as latitude,
                 CAST(j->>'longitude' AS DOUBLE) as longitude
             FROM combined_raw
+        ),
+        enriched_location AS (
+            SELECT
+                *,
+                {{ extract_district('raw_district', 'raw_location_approx', 'title') }} as district
+            FROM extracted
         ),
         normalized AS (
             SELECT
@@ -69,13 +75,13 @@
                     json_city,
                     json_municipality,
                     CASE
-                        WHEN location_approx ILIKE '%kraków%' OR location_approx ILIKE '%krakow%' THEN 'Kraków'
-                        WHEN location_approx ILIKE '%wieliczka%' THEN 'Wieliczka'
-                        WHEN location_approx ILIKE '%skawina%' THEN 'Skawina'
-                        WHEN location_approx ILIKE '%niepołomice%' OR location_approx ILIKE '%niepolomice%' THEN 'Niepołomice'
-                        WHEN location_approx ILIKE '%zabierzów%' OR location_approx ILIKE '%zabierzow%' THEN 'Zabierzów'
-                        WHEN location_approx ILIKE '%zielonki%' THEN 'Zielonki'
-                        WHEN location_approx ILIKE '%świątniki%' OR location_approx ILIKE '%swiatniki%' THEN 'Świątniki Górne'
+                        WHEN raw_location_approx ILIKE '%kraków%' OR raw_location_approx ILIKE '%krakow%' THEN 'Kraków'
+                        WHEN raw_location_approx ILIKE '%wieliczka%' THEN 'Wieliczka'
+                        WHEN raw_location_approx ILIKE '%skawina%' THEN 'Skawina'
+                        WHEN raw_location_approx ILIKE '%niepołomice%' OR raw_location_approx ILIKE '%niepolomice%' THEN 'Niepołomice'
+                        WHEN raw_location_approx ILIKE '%zabierzów%' OR raw_location_approx ILIKE '%zabierzow%' THEN 'Zabierzów'
+                        WHEN raw_location_approx ILIKE '%zielonki%' THEN 'Zielonki'
+                        WHEN raw_location_approx ILIKE '%świątniki%' OR raw_location_approx ILIKE '%swiatniki%' THEN 'Świątniki Górne'
                         WHEN district IN (
                             'Stare Miasto', 'Grzegórzki', 'Prądnik Czerwony', 'Prądnik Biały',
                             'Krowodrza', 'Bronowice', 'Zwierzyniec', 'Dębniki',
@@ -83,14 +89,32 @@
                             'Bieżanów-Prokocim', 'Podgórze', 'Czyżyny', 'Mistrzejowice',
                             'Bieńczyce', 'Wzgórza Krzesławickie', 'Nowa Huta'
                         ) THEN 'Kraków'
+                        WHEN district IN (
+                            'Wieliczka', 'Skawina', 'Niepołomice', 'Zabierzów', 'Zielonki', 'Świątniki Górne'
+                        ) THEN district
                         ELSE NULL
                     END
                 ) as city,
                 district,
-                location_approx,
+                COALESCE(
+                    raw_location_approx,
+                    CASE
+                        WHEN district IN (
+                            'Stare Miasto', 'Grzegórzki', 'Prądnik Czerwony', 'Prądnik Biały',
+                            'Krowodrza', 'Bronowice', 'Zwierzyniec', 'Dębniki',
+                            'Łagiewniki-Borek Fałęcki', 'Swoszowice', 'Podgórze Duchackie',
+                            'Bieżanów-Prokocim', 'Podgórze', 'Czyżyny', 'Mistrzejowice',
+                            'Bieńczyce', 'Wzgórza Krzesławickie', 'Nowa Huta'
+                        ) THEN 'Kraków, ' || district
+                        WHEN district IS NOT NULL AND (json_city IS NOT NULL OR json_municipality IS NOT NULL)
+                        THEN COALESCE(json_city, json_municipality) || ', ' || district
+                        WHEN district IS NOT NULL THEN district
+                        ELSE NULL
+                    END
+                ) as location_approx,
                 latitude,
                 longitude
-            FROM extracted
+            FROM enriched_location
         ),
         chronological_chain AS (
             SELECT 
