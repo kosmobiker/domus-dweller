@@ -1,7 +1,7 @@
 import json
 import re
 
-from selectolax.parser import HTMLParser
+from selectolax.lexbor import LexborHTMLParser as HTMLParser
 
 
 def _seller_segment_from_text(seller_text: str) -> str:
