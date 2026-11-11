@@ -629,5 +629,3 @@ def test_given_street_name_or_ambiguous_text_when_parsing_then_district_remains_
     listings = parse_search_results(raw_html)
     assert len(listings) == 1
     assert listings[0]["district"] is None
-
-

@@ -69,7 +69,7 @@ def test_olx_end_to_end_pipeline_logic() -> None:
 
     # 4. When: Preparing for MotherDuck (using the actual logic but mocking the connection)
     mock_con = MagicMock()
-    
+
     snapshot_date = date(2026, 4, 5)
     ingested_at = datetime(2026, 4, 5, 12, 0, 0, tzinfo=UTC)
 
@@ -93,9 +93,11 @@ def test_olx_end_to_end_pipeline_logic() -> None:
     mock_con.execute.side_effect = [pragma_result, insert_result]
 
     # We call the sink logic which performs the final normalization
-    with patch("duckdb.connect", return_value=mock_con), \
-         patch("os.getenv", return_value="fake-token"), \
-         patch("pyarrow.Table") as mock_table:
+    with (
+        patch("duckdb.connect", return_value=mock_con),
+        patch("os.getenv", return_value="fake-token"),
+        patch("pyarrow.Table") as mock_table,
+    ):
         mock_arrow_table = MagicMock()
         mock_arrow_table.column_names = [
             "source",

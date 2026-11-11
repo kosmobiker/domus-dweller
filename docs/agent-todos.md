@@ -29,6 +29,12 @@ Current objective: start Gold/Analytics.
 
 ## Active Backlog
 
+### Ingestion Performance & Detail Enrichment
+- [x] Execute OLX optimization & detail digestion plan: [docs/olx-performance-and-enrichment-plan.md](/home/user/domus-dweller/docs/olx-performance-and-enrichment-plan.md)
+  - [x] Implement parallel Python seed orchestrator with pagination wrap detection (~5x speedup).
+  - [x] Upgrade `enrich.py` to `curl_cffi` browser TLS impersonation and `--only-new` delta mode.
+  - [x] Expose `rent_additional` (administrative rent), building type, market type, and seller in Silver models.
+
 ### Data Quality
 
 - [ ] Implement outlier rejection in Silver (e.g., total price < 100 PLN, > 10M PLN).

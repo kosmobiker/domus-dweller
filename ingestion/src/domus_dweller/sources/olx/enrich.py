@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-import httpx
+from curl_cffi import requests as curl_requests
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from domus_dweller.sources.olx.parser import parse_detail_page
@@ -85,14 +85,75 @@ def _build_args() -> argparse.Namespace:
             "keep remaining listings unchanged. Set 0 to disable."
         ),
     )
+    parser.add_argument(
+        "--only-new",
+        action="store_true",
+        default=False,
+        help="Only fetch detail pages for listings not already present in MotherDuck/DuckDB.",
+    )
+    parser.add_argument(
+        "--database",
+        default="my_db",
+        help="Database to check for existing listings when --only-new is enabled.",
+    )
     return parser.parse_args()
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8), reraise=True)
-def _fetch_html(url: str, client: httpx.Client, *, timeout_sec: float) -> str:
+def _fetch_html(url: str, client: Any, *, timeout_sec: float) -> str:
     response = client.get(url, timeout=timeout_sec)
     response.raise_for_status()
     return response.text
+
+
+def fetch_existing_listing_ids(*, database: str = "my_db", token: str | None = None) -> set[str]:
+    """Retrieve existing source_listing_ids from MotherDuck or local DuckDB."""
+    import os
+
+    import duckdb
+    from dotenv import load_dotenv
+
+    load_dotenv()
+    token = token or os.getenv("MOTHERDUCK_TOKEN")
+    try:
+        is_local_file = (
+            not token
+            or token.lower() == "local"
+            or database.endswith((".duckdb", ".db"))
+            or Path(database).exists()
+        )
+        if is_local_file:
+            con = duckdb.connect(database)
+        else:
+            con = duckdb.connect(f"md:{database}?token={token}")
+
+        existing_ids: set[str] = set()
+        # Query silver.listing_identity
+        try:
+            sql = (
+                "SELECT DISTINCT source_listing_id FROM silver.listing_identity "
+                "WHERE source = 'olx'"
+            )
+            rows = con.execute(sql).fetchall()
+            existing_ids.update(str(r[0]).strip() for r in rows if r[0])
+        except Exception:
+            pass
+
+        # Also query bronze tables if present
+        for tbl in ["bronze.rent_bronze", "bronze.sale_bronze"]:
+            try:
+                rows = con.execute(
+                    f"SELECT DISTINCT source_listing_id FROM {tbl} WHERE source = 'olx'"
+                ).fetchall()
+                existing_ids.update(str(r[0]).strip() for r in rows if r[0])
+            except Exception:
+                pass
+
+        con.close()
+        return existing_ids
+    except Exception as exc:
+        print(f"[enrich] Warning: could not connect to database {database} for existing IDs: {exc}")
+        return set()
 
 
 def _split_detail_params_by_track(
@@ -177,19 +238,26 @@ def enrich_listings(
     timeout_sec: float,
     default_mode: str | None,
     max_consecutive_403: int = 8,
+    existing_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     if save_html_dir is not None:
         save_html_dir.mkdir(parents=True, exist_ok=True)
 
     enriched_rows: list[dict[str, Any]] = []
-    with httpx.Client(
-        follow_redirects=True,
-        headers={"User-Agent": USER_AGENT},
-    ) as client:
+    skipped_existing = 0
+
+    with curl_requests.Session(impersonate="chrome120") as client:
         consecutive_403 = 0
         for index, listing in enumerate(listings):
-            print(f"[enrich] Processing {index + 1}/{len(listings)}")
+            source_listing_id = str(listing.get("source_listing_id", "")).strip()
             source_url = str(listing.get("source_url", "")).strip()
+
+            if existing_ids and source_listing_id in existing_ids:
+                skipped_existing += 1
+                enriched_rows.append(dict(listing))
+                continue
+
+            print(f"[enrich] Processing {index + 1}/{len(listings)}")
             if not source_url:
                 consecutive_403 = 0
                 enriched_rows.append(dict(listing))
@@ -197,8 +265,11 @@ def enrich_listings(
 
             try:
                 raw_html = _fetch_html(source_url, client, timeout_sec=timeout_sec)
-            except httpx.HTTPStatusError as exc:
-                status_code = exc.response.status_code if exc.response is not None else None
+            except Exception as exc:
+                # Check for HTTP 403 or 404 on either curl_cffi or httpx error
+                response = getattr(exc, "response", None)
+                status_code = getattr(response, "status_code", None)
+
                 if status_code in {403, 404}:
                     print(
                         f"[enrich] Skipping detail page for listing due to HTTP {status_code}: "
@@ -221,9 +292,9 @@ def enrich_listings(
                         time.sleep(pause_ms / 1000)
                     continue
                 raise
+
             consecutive_403 = 0
             if save_html_dir is not None:
-                source_listing_id = str(listing.get("source_listing_id", "")).strip()
                 file_name = source_listing_id if source_listing_id else f"listing_{index + 1}"
                 (save_html_dir / f"{file_name}.html").write_text(raw_html, encoding="utf-8")
 
@@ -236,6 +307,8 @@ def enrich_listings(
             if pause_ms > 0 and index < len(listings) - 1:
                 time.sleep(pause_ms / 1000)
 
+    if skipped_existing > 0:
+        print(f"[enrich] Skipped {skipped_existing} existing listings (only-new delta enrichment).")
     return enriched_rows
 
 
@@ -248,8 +321,22 @@ def _read_listing_rows(input_path: Path) -> list[dict[str, Any]]:
 
 def main() -> None:
     args = _build_args()
+    if not args.input.exists():
+        print(f"[enrich] Input file {args.input} does not exist. Skipping enrichment.")
+        return
     rows = _read_listing_rows(args.input)
+    if not rows:
+        print(f"[enrich] No listings found in {args.input}. Skipping enrichment.")
+        return
     mode = None if args.mode == "auto" else args.mode
+
+    existing_ids: set[str] | None = None
+    if args.only_new:
+        existing_ids = fetch_existing_listing_ids(database=args.database)
+        print(
+            f"[enrich] Found {len(existing_ids)} existing listing IDs in database {args.database}"
+        )
+
     enriched_rows = enrich_listings(
         rows,
         save_html_dir=args.save_html_dir,
@@ -257,6 +344,7 @@ def main() -> None:
         timeout_sec=args.timeout_sec,
         default_mode=mode,
         max_consecutive_403=args.max_consecutive_403,
+        existing_ids=existing_ids,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(

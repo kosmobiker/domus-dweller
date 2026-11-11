@@ -9,55 +9,61 @@ from domus_dweller.sinks.motherduck_bootstrap import bootstrap_motherduck
 # Realistic raw_json payloads that mirror actual OLX parser output.
 # Crucially, 'parking' is a string (e.g. "w garażu"), not a boolean,
 # which previously broke the CAST in the staging model.
-REALISTIC_RENT_JSON_DAY1 = json.dumps({
-    "title": "Mieszkanie 2-pokojowe Krowodrza",
-    "price_total": 2000,
-    "price_per_sqm_source": 40.0,
-    "currency": "PLN",
-    "area_sqm": 50.0,
-    "rooms": 2,
-    "floor": "2",
-    "seller_segment": "private",
-    "city": "Kraków",
-    "district": "Krowodrza",
-    "location_approx": "Małopolskie, Kraków, Krowodrza",
-    "latitude": 50.075,
-    "longitude": 19.925,
-})
+REALISTIC_RENT_JSON_DAY1 = json.dumps(
+    {
+        "title": "Mieszkanie 2-pokojowe Krowodrza",
+        "price_total": 2000,
+        "price_per_sqm_source": 40.0,
+        "currency": "PLN",
+        "area_sqm": 50.0,
+        "rooms": 2,
+        "floor": "2",
+        "seller_segment": "private",
+        "city": "Kraków",
+        "district": "Krowodrza",
+        "location_approx": "Małopolskie, Kraków, Krowodrza",
+        "latitude": 50.075,
+        "longitude": 19.925,
+    }
+)
 
-REALISTIC_RENT_JSON_DAY2 = json.dumps({
-    "title": "Mieszkanie 2-pokojowe Krowodrza",
-    "price_total": 2200,
-    "price_per_sqm_source": 44.0,
-    "currency": "PLN",
-    "area_sqm": 50.0,
-    "rooms": 2,
-    "floor": "2",
-    "seller_segment": "private",
-    "city": "Kraków",
-    "district": "Krowodrza",
-    "location_approx": "Małopolskie, Kraków, Krowodrza",
-    "latitude": 50.075,
-    "longitude": 19.925,
-})
+REALISTIC_RENT_JSON_DAY2 = json.dumps(
+    {
+        "title": "Mieszkanie 2-pokojowe Krowodrza",
+        "price_total": 2200,
+        "price_per_sqm_source": 44.0,
+        "currency": "PLN",
+        "area_sqm": 50.0,
+        "rooms": 2,
+        "floor": "2",
+        "seller_segment": "private",
+        "city": "Kraków",
+        "district": "Krowodrza",
+        "location_approx": "Małopolskie, Kraków, Krowodrza",
+        "latitude": 50.075,
+        "longitude": 19.925,
+    }
+)
 
 REALISTIC_RENT_JSON_DAY3 = REALISTIC_RENT_JSON_DAY2  # same price, duplicate observation
 
-REALISTIC_RENT_JSON_DAY4 = json.dumps({
-    "title": "Mieszkanie 2-pokojowe Krowodrza",
-    "price_total": 2100,
-    "price_per_sqm_source": None,  # Tests fallback calculation: 2100 / 50.0 = 42.0
-    "currency": "PLN",
-    "area_sqm": 50.0,
-    "rooms": 2,
-    "floor": "2",
-    "seller_segment": "private",
-    "city": "Kraków",
-    "district": "Krowodrza",
-    "location_approx": "Małopolskie, Kraków, Krowodrza",
-    "latitude": 50.075,
-    "longitude": 19.925,
-})
+REALISTIC_RENT_JSON_DAY4 = json.dumps(
+    {
+        "title": "Mieszkanie 2-pokojowe Krowodrza",
+        "price_total": 2100,
+        "price_per_sqm_source": None,  # Tests fallback calculation: 2100 / 50.0 = 42.0
+        "currency": "PLN",
+        "area_sqm": 50.0,
+        "rooms": 2,
+        "floor": "2",
+        "seller_segment": "private",
+        "city": "Kraków",
+        "district": "Krowodrza",
+        "location_approx": "Małopolskie, Kraków, Krowodrza",
+        "latitude": 50.075,
+        "longitude": 19.925,
+    }
+)
 
 
 def _insert_bronze_row(con, listing_id, mode, date, raw_json, table="rent_bronze"):
@@ -99,7 +105,9 @@ def test_dbt_silver_layer(tmp_path):
     subprocess.run(["uv", "run", "dbt", "deps"], check=True, cwd=cwd, env=env)
     subprocess.run(
         ["uv", "run", "dbt", "run-operation", "seed_silver_history", "--target", "dev"],
-        check=True, cwd=cwd, env=env
+        check=True,
+        cwd=cwd,
+        env=env,
     )
 
     # Verify initial seeding works
@@ -177,21 +185,23 @@ def test_dbt_silver_layer(tmp_path):
     con.close()
 
     # 7. Add Day 5 data where listing 123 is missing (delisted), only listing 999 is present
-    realistic_rent_day5 = json.dumps({
-        "title": "Inne mieszkanie",
-        "price_total": 3500,
-        "price_per_sqm_source": 70.0,
-        "currency": "PLN",
-        "area_sqm": 50.0,
-        "rooms": 2,
-        "floor": "1",
-        "seller_segment": "private",
-        "city": "Kraków",
-        "district": "Stare Miasto",
-        "location_approx": "Małopolskie, Kraków, Stare Miasto",
-        "latitude": 50.06,
-        "longitude": 19.94,
-    })
+    realistic_rent_day5 = json.dumps(
+        {
+            "title": "Inne mieszkanie",
+            "price_total": 3500,
+            "price_per_sqm_source": 70.0,
+            "currency": "PLN",
+            "area_sqm": 50.0,
+            "rooms": 2,
+            "floor": "1",
+            "seller_segment": "private",
+            "city": "Kraków",
+            "district": "Stare Miasto",
+            "location_approx": "Małopolskie, Kraków, Stare Miasto",
+            "latitude": 50.06,
+            "longitude": 19.94,
+        }
+    )
     con = duckdb.connect(db_path)
     _insert_bronze_row(con, "999", "rent", "2026-07-05", realistic_rent_day5)
     con.close()
@@ -223,46 +233,52 @@ def test_silver_enriches_missing_districts_for_rent_and_sale(tmp_path):
     bootstrap_motherduck(database=db_path, token="local")
 
     # Rent listing with district in title
-    rent_json = json.dumps({
-        "title": "Słoneczne 3 pokoje z zabudowaną loggią | Krowodrza",
-        "price_total": 3000,
-        "price_per_sqm_source": 50.0,
-        "currency": "PLN",
-        "area_sqm": 60.0,
-        "rooms": 3,
-        "city": None,
-        "district": None,
-        "location_approx": None,
-        "seller_segment": "unknown",
-    })
+    rent_json = json.dumps(
+        {
+            "title": "Słoneczne 3 pokoje z zabudowaną loggią | Krowodrza",
+            "price_total": 3000,
+            "price_per_sqm_source": 50.0,
+            "currency": "PLN",
+            "area_sqm": 60.0,
+            "rooms": 3,
+            "city": None,
+            "district": None,
+            "location_approx": None,
+            "seller_segment": "unknown",
+        }
+    )
 
     # Sale listing with subdistrict (Zabłocie -> Podgórze) in title
-    sale_json = json.dumps({
-        "title": "Lux! Zabłocie! Klimeckiego, Salsa",
-        "price_total": 850000,
-        "price_per_sqm_source": 17000.0,
-        "currency": "PLN",
-        "area_sqm": 50.0,
-        "rooms": 2,
-        "city": None,
-        "district": None,
-        "location_approx": None,
-        "seller_segment": "unknown",
-    })
+    sale_json = json.dumps(
+        {
+            "title": "Lux! Zabłocie! Klimeckiego, Salsa",
+            "price_total": 850000,
+            "price_per_sqm_source": 17000.0,
+            "currency": "PLN",
+            "area_sqm": 50.0,
+            "rooms": 2,
+            "city": None,
+            "district": None,
+            "location_approx": None,
+            "seller_segment": "unknown",
+        }
+    )
 
     # Sale listing with street name (should not extract false positive)
-    street_sale_json = json.dumps({
-        "title": "Centrum/Krowoderska55/mieszkanie/lokal",
-        "price_total": 1400000,
-        "price_per_sqm_source": 20848.85,
-        "currency": "PLN",
-        "area_sqm": 67.15,
-        "rooms": None,
-        "city": None,
-        "district": None,
-        "location_approx": None,
-        "seller_segment": "unknown",
-    })
+    street_sale_json = json.dumps(
+        {
+            "title": "Centrum/Krowoderska55/mieszkanie/lokal",
+            "price_total": 1400000,
+            "price_per_sqm_source": 20848.85,
+            "currency": "PLN",
+            "area_sqm": 67.15,
+            "rooms": None,
+            "city": None,
+            "district": None,
+            "location_approx": None,
+            "seller_segment": "unknown",
+        }
+    )
 
     con = duckdb.connect(db_path)
     _insert_bronze_row(con, "rent-1", "rent", "2026-08-01", rent_json, table="rent_bronze")
@@ -280,8 +296,7 @@ def test_silver_enriches_missing_districts_for_rent_and_sale(tmp_path):
     rows = {
         row[0]: (row[1], row[2], row[3])
         for row in con.execute(
-            "SELECT source_listing_id, district, city, location_approx "
-            "FROM silver.listing_current"
+            "SELECT source_listing_id, district, city, location_approx FROM silver.listing_current"
         ).fetchall()
     }
     con.close()
@@ -305,3 +320,90 @@ def test_silver_enriches_missing_districts_for_rent_and_sale(tmp_path):
     assert row_street[0] is None
 
 
+def test_silver_tracks_rent_additional_and_building_type(tmp_path):
+    """Verify Silver layer captures rent_additional, building_type, and tracks SCD changes."""
+    db_path = str(tmp_path / "test_rent_add.duckdb")
+    bootstrap_motherduck(database=db_path, token="local")
+
+    day1_json = json.dumps(
+        {
+            "title": "Mieszkanie 2 pokoje",
+            "price_total": 2500,
+            "price_per_sqm_source": 50.0,
+            "currency": "PLN",
+            "rent_additional": 600.0,
+            "rent_additional_currency": "PLN",
+            "building_type": "Blok",
+            "market_type": "Wtórny",
+            "seller_name": "Jan Kowalski",
+            "area_sqm": 50.0,
+            "rooms": 2,
+            "floor": "3",
+            "city": "Kraków",
+            "district": "Krowodrza",
+            "seller_segment": "private",
+        }
+    )
+
+    # Day 2: price_total stays 2500, but rent_additional (czynsz admin) increases from 600 to 750!
+    day2_json = json.dumps(
+        {
+            "title": "Mieszkanie 2 pokoje",
+            "price_total": 2500,
+            "price_per_sqm_source": 50.0,
+            "currency": "PLN",
+            "rent_additional": 750.0,
+            "rent_additional_currency": "PLN",
+            "building_type": "Blok",
+            "market_type": "Wtórny",
+            "seller_name": "Jan Kowalski",
+            "area_sqm": 50.0,
+            "rooms": 2,
+            "floor": "3",
+            "city": "Kraków",
+            "district": "Krowodrza",
+            "seller_segment": "private",
+        }
+    )
+
+    con = duckdb.connect(db_path)
+    _insert_bronze_row(con, "listing-1", "rent", "2026-09-01", day1_json, table="rent_bronze")
+    con.close()
+
+    env = os.environ.copy()
+    env["DEV_DB"] = db_path
+    cwd = os.path.join(os.getcwd(), "transform")
+    subprocess.run(["uv", "run", "dbt", "deps"], check=True, cwd=cwd, env=env)
+    subprocess.run(["uv", "run", "dbt", "build", "--target", "dev"], check=True, cwd=cwd, env=env)
+
+    con = duckdb.connect(db_path)
+    current = con.execute(
+        "SELECT rent_additional, building_type, market_type, seller_name "
+        "FROM silver.listing_current"
+    ).fetchone()
+    assert current[0] == 600.0
+    assert current[1] == "Blok"
+    assert current[2] == "Wtórny"
+    assert current[3] == "Jan Kowalski"
+    con.close()
+
+    # Day 2: rent_additional increase creates new SCD Type 2 snapshot version
+    con = duckdb.connect(db_path)
+    _insert_bronze_row(con, "listing-1", "rent", "2026-09-02", day2_json, table="rent_bronze")
+    con.close()
+
+    subprocess.run(["uv", "run", "dbt", "build", "--target", "dev"], check=True, cwd=cwd, env=env)
+
+    con = duckdb.connect(db_path)
+    versions = con.execute(
+        "SELECT rent_additional, dbt_valid_to FROM silver.listing_versions ORDER BY dbt_valid_from"
+    ).fetchall()
+    assert len(versions) == 2, "Snapshot should create new version when rent_additional changes"
+    assert versions[0][0] == 600.0
+    assert versions[0][1] is not None
+    assert versions[1][0] == 750.0
+    assert versions[1][1] is None
+
+    current2 = con.execute("SELECT rent_additional FROM silver.listing_current").fetchone()
+    assert current2[0] == 750.0
+    con.close()

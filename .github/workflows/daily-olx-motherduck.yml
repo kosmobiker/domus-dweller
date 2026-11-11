@@ -61,6 +61,9 @@ jobs:
       - name: Parse OLX
         run: make daily-olx-parse DATE=${{ steps.prep.outputs.run_date }} PAGES=${{ steps.prep.outputs.pages }}
 
+      - name: Enrich new listings (detail pages)
+        run: make daily-olx-enrich DATE=${{ steps.prep.outputs.run_date }} MD_DATABASE=${{ env.MD_DATABASE }}
+
       - name: Upload parsed artifacts
         uses: actions/upload-artifact@v4
         with:

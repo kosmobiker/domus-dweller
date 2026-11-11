@@ -419,23 +419,27 @@ def test_given_save_html_dir_and_empty_url_and_sale_mode_when_enriching(
     # Given
     listings = [
         {"source_listing_id": "id1", "source_url": ""},
-        {"source_listing_id": "id2", "source_url": "https://www.olx.pl/d/oferta/mieszkania/sprzedaz/2.html"},
+        {
+            "source_listing_id": "id2",
+            "source_url": "https://www.olx.pl/d/oferta/mieszkania/sprzedaz/2.html",
+        },
         {"source_listing_id": "", "source_url": "https://www.olx.pl/d/oferta/3.html"},
         {
             "source_listing_id": "id4",
             "source_url": "https://www.olx.pl/d/oferta/4.html",
             "mode": "rent",
-        }
+        },
     ]
+
     def _fake_fetch_html(url: str, *_args, **_kwargs) -> str:
         if "3.html" in url:
             request = httpx.Request("GET", url)
             response = httpx.Response(status_code=404, request=request)
             raise httpx.HTTPStatusError("not found", request=request, response=response)
         return "<html><body><p data-nx-name='P3'>Powierzchnia: 10 m²</p></body></html>"
-    
+
     monkeypatch.setattr(enrich, "_fetch_html", _fake_fetch_html)
-    
+
     # When
     enriched = enrich.enrich_listings(
         listings,
@@ -444,7 +448,7 @@ def test_given_save_html_dir_and_empty_url_and_sale_mode_when_enriching(
         timeout_sec=5.0,
         default_mode="unknown_mode",
     )
-    
+
     # Then
     assert len(enriched) == 4
     assert enriched[0]["source_url"] == ""
@@ -452,6 +456,112 @@ def test_given_save_html_dir_and_empty_url_and_sale_mode_when_enriching(
     assert enriched[1]["area_sqm"] == 10.0
     assert enriched[2]["source_listing_id"] == ""
     assert enriched[3]["mode"] == "rent"
-    
+
     saved_files = list(tmp_path.glob("*.html"))
     assert len(saved_files) == 2
+
+
+def test_given_only_new_when_listing_already_known_then_fetch_is_skipped(monkeypatch) -> None:
+    # Given
+    listings = [
+        {
+            "source_listing_id": "known-1",
+            "source_url": "https://www.olx.pl/d/oferta/known-1.html",
+            "title": "Known flat",
+        },
+        {
+            "source_listing_id": "new-2",
+            "source_url": "https://www.olx.pl/d/oferta/new-2.html",
+            "title": "Brand new flat",
+        },
+    ]
+
+    fetched_urls = []
+
+    def _fake_fetch_html(url: str, *_args, **_kwargs) -> str:
+        fetched_urls.append(url)
+        return "<html><body><p data-nx-name='P3'>Powierzchnia: 65 m²</p></body></html>"
+
+    monkeypatch.setattr(enrich, "_fetch_html", _fake_fetch_html)
+
+    # When
+    enriched = enrich.enrich_listings(
+        listings,
+        save_html_dir=None,
+        pause_ms=0,
+        timeout_sec=5.0,
+        default_mode="rent",
+        existing_ids={"known-1"},
+    )
+
+    # Then
+    assert len(enriched) == 2
+    assert fetched_urls == ["https://www.olx.pl/d/oferta/new-2.html"]
+    # known-1 was skipped and kept unchanged
+    assert "area_sqm" not in enriched[0]
+    # new-2 was fetched and enriched
+    assert enriched[1]["area_sqm"] == 65.0
+
+
+def test_fetch_existing_listing_ids_from_duckdb(tmp_path: Path) -> None:
+    import duckdb
+
+    db_path = str(tmp_path / "test.duckdb")
+    con = duckdb.connect(db_path)
+    con.execute("CREATE SCHEMA silver;")
+    con.execute("CREATE TABLE silver.listing_identity (source VARCHAR, source_listing_id VARCHAR);")
+    con.execute("INSERT INTO silver.listing_identity VALUES ('olx', 'id-100'), ('olx', 'id-200');")
+    con.execute("CREATE SCHEMA bronze;")
+    con.execute("CREATE TABLE bronze.rent_bronze (source VARCHAR, source_listing_id VARCHAR);")
+    con.execute("INSERT INTO bronze.rent_bronze VALUES ('olx', 'id-300');")
+    con.close()
+
+    ids = enrich.fetch_existing_listing_ids(database=db_path)
+    assert ids == {"id-100", "id-200", "id-300"}
+
+    # Test failure fallback
+    fallback_ids = enrich.fetch_existing_listing_ids(database="/non/existent/path.duckdb")
+    assert fallback_ids == set()
+
+
+def test_enrich_cli_with_only_new_flag(monkeypatch, tmp_path: Path) -> None:
+    input_path = tmp_path / "input.json"
+    output_path = tmp_path / "output.json"
+    input_path.write_text(
+        json.dumps(
+            [
+                {"source_listing_id": "old-1", "source_url": "https://example.com/1"},
+                {"source_listing_id": "new-2", "source_url": "https://example.com/2"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    def _fake_fetch_existing(*args, **kwargs) -> set[str]:
+        return {"old-1"}
+
+    def _fake_fetch(url: str, *_args, **_kwargs) -> str:
+        return "<html><body><p data-nx-name='P3'>Powierzchnia: 50 m²</p></body></html>"
+
+    monkeypatch.setattr(enrich, "fetch_existing_listing_ids", _fake_fetch_existing)
+    monkeypatch.setattr(enrich, "_fetch_html", _fake_fetch)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "enrich_olx",
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--only-new",
+            "--pause-ms",
+            "0",
+        ],
+    )
+
+    enrich.main()
+
+    res = json.loads(output_path.read_text(encoding="utf-8"))
+    assert len(res) == 2
+    assert "area_sqm" not in res[0]
+    assert res[1]["area_sqm"] == 50.0
