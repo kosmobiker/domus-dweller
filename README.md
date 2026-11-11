@@ -29,7 +29,7 @@ The goal is to collect flat and house listings over time, normalize them into a 
 
 - Data pipeline: Python
 - Transformation: dbt-core + DuckDB/MotherDuck SQL + notebooks
-- Python version: 3.13
+- Python version: 3.14
 - Environment and dependency manager: `uv`
 - Linting and formatting: `ruff`
 - Local parse artifacts: JSON under `data/parsed/` (used by parse job and sink job)

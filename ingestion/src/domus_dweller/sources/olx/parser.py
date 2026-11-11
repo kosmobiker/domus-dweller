@@ -1,7 +1,7 @@
 import json
 import re
 
-from selectolax.parser import HTMLParser
+from selectolax.lexbor import LexborHTMLParser as HTMLParser
 
 
 def _seller_segment_from_text(seller_text: str) -> str:
@@ -613,8 +613,8 @@ def _merge_card_and_jsonld(card_listings: list[dict], jsonld_listings: list[dict
             enriched["district"] = jsonld.get("district") or enriched.get("district")
             enriched["city"] = jsonld.get("city") or enriched.get("city")
             enriched["municipality"] = jsonld.get("municipality") or enriched.get("municipality")
-            enriched["location_approx"] = (
-                jsonld.get("location_approx") or enriched.get("location_approx")
+            enriched["location_approx"] = jsonld.get("location_approx") or enriched.get(
+                "location_approx"
             )
             enriched["latitude"] = (
                 jsonld.get("latitude")
@@ -794,35 +794,39 @@ def _merge_with_prerendered(merged: list[dict], prerendered_state: dict[str, dic
     return merged
 
 
-KRAKOW_DISTRICTS: frozenset[str] = frozenset({
-    "Stare Miasto",
-    "Grzegórzki",
-    "Prądnik Czerwony",
-    "Prądnik Biały",
-    "Krowodrza",
-    "Bronowice",
-    "Zwierzyniec",
-    "Dębniki",
-    "Łagiewniki-Borek Fałęcki",
-    "Swoszowice",
-    "Podgórze Duchackie",
-    "Bieżanów-Prokocim",
-    "Podgórze",
-    "Czyżyny",
-    "Mistrzejowice",
-    "Bieńczyce",
-    "Wzgórza Krzesławickie",
-    "Nowa Huta",
-})
+KRAKOW_DISTRICTS: frozenset[str] = frozenset(
+    {
+        "Stare Miasto",
+        "Grzegórzki",
+        "Prądnik Czerwony",
+        "Prądnik Biały",
+        "Krowodrza",
+        "Bronowice",
+        "Zwierzyniec",
+        "Dębniki",
+        "Łagiewniki-Borek Fałęcki",
+        "Swoszowice",
+        "Podgórze Duchackie",
+        "Bieżanów-Prokocim",
+        "Podgórze",
+        "Czyżyny",
+        "Mistrzejowice",
+        "Bieńczyce",
+        "Wzgórza Krzesławickie",
+        "Nowa Huta",
+    }
+)
 
-NEARBY_MUNICIPALITIES: frozenset[str] = frozenset({
-    "Wieliczka",
-    "Skawina",
-    "Niepołomice",
-    "Zabierzów",
-    "Zielonki",
-    "Świątniki Górne",
-})
+NEARBY_MUNICIPALITIES: frozenset[str] = frozenset(
+    {
+        "Wieliczka",
+        "Skawina",
+        "Niepołomice",
+        "Zabierzów",
+        "Zielonki",
+        "Świątniki Górne",
+    }
+)
 
 _WORD_BOUNDARY_PREFIX = r"(?i)(?:^|[^a-zA-Z0-9ąćęłńóśźżĄĆĘŁŃÓŚŹŻ])"
 _WORD_BOUNDARY_SUFFIX = r"(?:$|[^a-zA-Z0-9ąćęłńóśźżĄĆĘŁŃÓŚŹŻ])"
@@ -921,5 +925,3 @@ def _enrich_missing_districts(listings: list[dict], *, page_city: str | None) ->
             elif not district and page_city and not item.get("city"):
                 item["city"] = page_city
     return listings
-
-

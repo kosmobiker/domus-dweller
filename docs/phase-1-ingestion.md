@@ -12,7 +12,7 @@ No dedup and no SCD in ingestion. Those belong to Silver.
 
 ## Stack
 
-- Python 3.13
+- Python 3.14
 - `uv` for env/deps
 - `ruff` for linting
 - `curl` (Makefile fetch) + `selectolax` for HTML parsing

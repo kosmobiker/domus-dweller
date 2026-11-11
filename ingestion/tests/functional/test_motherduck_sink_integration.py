@@ -29,6 +29,7 @@ def test_given_rent_json_when_running_sink_cli_then_brief_bronze_row_is_appended
     rent_file.write_text(json.dumps(rents), encoding="utf-8")
 
     real_connection = duckdb.connect(":memory:")
+
     class _KeepAliveConnection:
         def __init__(self, inner: duckdb.DuckDBPyConnection) -> None:
             self._inner = inner

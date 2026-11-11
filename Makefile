@@ -1,4 +1,4 @@
-.PHONY: lint test data verify daily-olx-rent daily-olx-sale daily-olx daily-olx-parse daily-olx-sink-motherduck motherduck-bootstrap silver-sync
+.PHONY: lint test data verify daily-olx-rent daily-olx-sale daily-olx daily-olx-parse daily-olx-enrich daily-olx-sink-motherduck motherduck-bootstrap silver-sync
 
 COV_MIN := 90
 UA := Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36
@@ -24,57 +24,32 @@ data:
 
 verify: lint test
 
-define run_olx_job
-	@mkdir -p data/raw/$(DATE) data/parsed/$(DATE)
-	@echo "Starting OLX $(1) run for $(DATE) (pages=$(PAGES), cities=$(words $(CITIES)))"
-	@set -e; \
-	for city in $(CITIES); do \
-		for property in $(3); do \
-			seed="$${property}_$${city}"; \
-			if [ "$$property" = "pokoje" ]; then \
-				category_slug="stancje-pokoje"; \
-			else \
-				category_slug="$$property"; \
-			fi; \
-			if [ "$$category_slug" = "stancje-pokoje" ]; then \
-				base_url="$(OLX_BASE_URL)/$${category_slug}/$${city}/"; \
-			else \
-				base_url="$(OLX_BASE_URL)/$${category_slug}/$(2)/$${city}/"; \
-			fi; \
-			echo "[OLX $(1)] Seed $$seed"; \
-			for i in $$(seq 1 $(PAGES)); do \
-				raw="data/raw/$(DATE)/olx_$(1)_$${seed}_page_$$i.html"; \
-				parsed="data/parsed/$(DATE)/olx_$(1)_$${seed}_page_$$i.json"; \
-				echo "[OLX $(1)] Fetch $$seed page $$i/$(PAGES)"; \
-				if ! uv run python -m domus_dweller.sources.olx.fetch_search --url "$${base_url}?page=$$i" --output "$$raw"; then \
-					echo "[OLX $(1)] Fetch failed for $$seed page $$i, stopping this seed"; \
-					rm -f "$$raw" "$$parsed"; \
-					break; \
-				fi; \
-				echo "[OLX $(1)] Parse $$seed page $$i/$(PAGES)"; \
-				uv run python -m domus_dweller.parse --source olx --input "$$raw" --output "$$parsed"; \
-				if [ "$$(wc -c < "$$parsed")" -le 3 ]; then \
-					echo "[OLX $(1)] Empty parsed page at $$seed page $$i, stopping this seed"; \
-					rm -f "$$raw" "$$parsed"; \
-					break; \
-				fi; \
-			done; \
-		done; \
-	done
-	@echo "[OLX $(1)] Merge search pages"
-	@uv run python -m domus_dweller.merge_pages --pattern "data/parsed/$(DATE)/olx_$(1)_*_page_*.json" --output data/parsed/$(DATE)/olx_$(1)_all.json
-	@echo "Finished OLX $(1) run for $(DATE)"
-endef
+WORKERS ?= 4
 
 daily-olx-rent:
-	$(call run_olx_job,rent,wynajem,$(PROPERTY_TYPES_RENT))
+	uv run python -m domus_dweller.sources.olx.orchestrator --mode rent --date "$(DATE)" --pages "$(PAGES)" --cities "$(CITIES)" --workers "$(WORKERS)"
 
 daily-olx-sale:
-	$(call run_olx_job,sale,sprzedaz,$(PROPERTY_TYPES_SALE))
+	uv run python -m domus_dweller.sources.olx.orchestrator --mode sale --date "$(DATE)" --pages "$(PAGES)" --cities "$(CITIES)" --workers "$(WORKERS)"
 
-daily-olx: daily-olx-rent daily-olx-sale
+daily-olx:
+	uv run python -m domus_dweller.sources.olx.orchestrator --mode both --date "$(DATE)" --pages "$(PAGES)" --cities "$(CITIES)" --workers "$(WORKERS)"
 
 daily-olx-parse: daily-olx
+
+daily-olx-enrich:
+	uv run python -m domus_dweller.sources.olx.enrich \
+		--input data/parsed/$(DATE)/olx_rent_all.json \
+		--output data/parsed/$(DATE)/olx_rent_all.json \
+		--mode rent \
+		--only-new \
+		--database "$(MD_DATABASE)"
+	uv run python -m domus_dweller.sources.olx.enrich \
+		--input data/parsed/$(DATE)/olx_sale_all.json \
+		--output data/parsed/$(DATE)/olx_sale_all.json \
+		--mode sale \
+		--only-new \
+		--database "$(MD_DATABASE)"
 
 daily-olx-sink-motherduck:
 	@attempt=1; \

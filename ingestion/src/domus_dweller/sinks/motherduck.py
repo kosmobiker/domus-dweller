@@ -89,6 +89,7 @@ def load_rows_to_motherduck(
         raise ValueError(f"`mode` must be `rent` or `sale`, got: {mode}")
 
     from dotenv import load_dotenv
+
     load_dotenv()
     token = token or os.getenv("MOTHERDUCK_TOKEN")
 
@@ -128,10 +129,7 @@ def load_rows_to_motherduck(
 
     # Only pass columns that exist in the target table to avoid PyArrow mixed-type crashes
     # for unused fields (e.g., 'floor' being int vs str).
-    filtered_rows = [
-        {k: v for k, v in row.items() if k in table_columns}
-        for row in unique_rows
-    ]
+    filtered_rows = [{k: v for k, v in row.items() if k in table_columns} for row in unique_rows]
 
     # Use pyarrow to efficiently load the list of dicts
     arrow_table = pa.Table.from_pylist(filtered_rows)

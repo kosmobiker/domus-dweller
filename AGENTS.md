@@ -108,7 +108,7 @@ A source is not considered integrated until all of the following exist:
 - Prefer Python for ingestion, normalization, and notebook-driven analysis.
 - Prefer `uv` for dependency and environment management.
 - Prefer `ruff` for linting and formatting.
-- Target Python `3.13` unless a dependency forces a lower version.
+- Target Python `3.14` unless a dependency forces a lower version.
 - Prefer TypeScript only when the web application work begins.
 - Prefer simple HTTP fetching plus HTML parsing before browser automation.
 - Prefer application-side H3 computation before database GIS extensions.

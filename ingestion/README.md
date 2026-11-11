@@ -13,6 +13,6 @@ Intended contents:
 
 Tooling baseline:
 
-- Python `3.13`
+- Python `3.14`
 - `uv`
 - `ruff`
