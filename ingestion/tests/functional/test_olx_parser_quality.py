@@ -130,6 +130,51 @@ def test_given_olx_jsonld_offers_when_parsing_then_listings_are_extracted() -> N
     assert listings[0]["price_valid_until"] == "2026-04-19T17:28:39+02:00"
 
 
+def test_given_offsite_promo_urls_when_parsing_then_only_olx_listings_are_returned() -> None:
+    # Given: OLX search pages can contain cross-site promo cards/offers (e.g. Otodom)
+    # whose URLs also end with an "-ID..." marker.
+    raw_html = """
+    <html><body>
+      <article data-cy="l-card" data-id="olx-1AbC">
+        <a href="https://www.olx.pl/d/oferta/flat-CID3-ID1AbC.html">OLX flat</a>
+      </article>
+      <article data-cy="l-card">
+        <a href="https://www.otodom.pl/oferta/dom-160-m-ID4E40p">Otodom promo</a>
+      </article>
+      <script type="application/ld+json">
+        {
+          "offers": {
+            "offers": [
+              {
+                "name": "OLX house",
+                "url": "https://www.olx.pl/d/oferta/house-CID3-ID2AbC.html",
+                "price": 1000,
+                "priceCurrency": "PLN"
+              },
+              {
+                "name": "Otodom other",
+                "url": "https://www.otodom.pl/oferta/other-ID4E4lR",
+                "price": 2000,
+                "priceCurrency": "PLN"
+              }
+            ]
+          }
+        }
+      </script>
+    </body></html>
+    """
+
+    # When
+    listings = parse_search_results(raw_html)
+
+    # Then
+    assert [listing["source_listing_id"] for listing in listings] == ["olx-1AbC", "olx-2AbC"]
+    assert [listing["source_url"] for listing in listings] == [
+        "https://www.olx.pl/d/oferta/flat-CID3-ID1AbC.html",
+        "https://www.olx.pl/d/oferta/house-CID3-ID2AbC.html",
+    ]
+
+
 def test_given_olx_cards_and_jsonld_when_parsing_then_rows_are_enriched_by_id() -> None:
     # Given
     raw_html = """

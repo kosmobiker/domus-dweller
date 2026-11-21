@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from curl_cffi import requests as curl_requests
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from domus_dweller.sources.olx.parser import parse_detail_page
 
@@ -15,6 +15,10 @@ USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/123.0 Safari/537.36"
 )
+
+# Detail pages that are blocked or gone will not become available by retrying.
+PERMANENT_HTTP_STATUSES = frozenset({403, 404, 410})
+SKIPPED_DETAIL_STATUSES = PERMANENT_HTTP_STATUSES
 
 COMMON_DETAIL_PARAM_KEYS = {
     "powierzchnia",
@@ -99,7 +103,23 @@ def _build_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8), reraise=True)
+def _status_code_from_exception(exc: BaseException) -> int | None:
+    """Read the HTTP status from curl_cffi and httpx error objects."""
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    return status_code if isinstance(status_code, int) else None
+
+
+def _is_retryable_fetch_error(exc: BaseException) -> bool:
+    return _status_code_from_exception(exc) not in PERMANENT_HTTP_STATUSES
+
+
+@retry(
+    retry=retry_if_exception(_is_retryable_fetch_error),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=8),
+    reraise=True,
+)
 def _fetch_html(url: str, client: Any, *, timeout_sec: float) -> str:
     response = client.get(url, timeout=timeout_sec)
     response.raise_for_status()
@@ -245,6 +265,7 @@ def enrich_listings(
 
     enriched_rows: list[dict[str, Any]] = []
     skipped_existing = 0
+    skipped_unavailable = 0
 
     with curl_requests.Session(impersonate="chrome120") as client:
         consecutive_403 = 0
@@ -266,16 +287,16 @@ def enrich_listings(
             try:
                 raw_html = _fetch_html(source_url, client, timeout_sec=timeout_sec)
             except Exception as exc:
-                # Check for HTTP 403 or 404 on either curl_cffi or httpx error
-                response = getattr(exc, "response", None)
-                status_code = getattr(response, "status_code", None)
+                # curl_cffi and httpx both expose the status via exc.response.
+                status_code = _status_code_from_exception(exc)
 
-                if status_code in {403, 404}:
+                if status_code in SKIPPED_DETAIL_STATUSES:
                     print(
                         f"[enrich] Skipping detail page for listing due to HTTP {status_code}: "
                         f"{source_url}"
                     )
                     enriched_rows.append(dict(listing))
+                    skipped_unavailable += 1
                     if status_code == 403:
                         consecutive_403 += 1
                         if max_consecutive_403 > 0 and consecutive_403 >= max_consecutive_403:
@@ -309,6 +330,11 @@ def enrich_listings(
 
     if skipped_existing > 0:
         print(f"[enrich] Skipped {skipped_existing} existing listings (only-new delta enrichment).")
+    if skipped_unavailable > 0:
+        print(
+            f"[enrich] Skipped {skipped_unavailable} detail pages with HTTP "
+            f"{sorted(SKIPPED_DETAIL_STATUSES)}; rows were kept unchanged."
+        )
     return enriched_rows
 
 
