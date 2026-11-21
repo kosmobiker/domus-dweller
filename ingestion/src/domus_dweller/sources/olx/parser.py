@@ -1,5 +1,6 @@
 import json
 import re
+from urllib.parse import urlparse
 
 from selectolax.lexbor import LexborHTMLParser as HTMLParser
 
@@ -101,6 +102,11 @@ def _parse_card_listings(tree: HTMLParser) -> list[dict]:
                 source_url = f"https://www.olx.pl{source_url}"
             title = link.text(separator=" ", strip=True)
 
+        # OLX search pages may contain cross-site promo cards (e.g. Otodom).
+        # They are not OLX listings and their detail pages cannot be enriched here.
+        if source_url and not _is_olx_url(source_url):
+            continue
+
         h4 = card.css_first("h4")
         if h4 is not None:
             title = h4.text(strip=True)
@@ -190,6 +196,8 @@ def _parse_jsonld_offers(tree: HTMLParser, *, page_city: str | None) -> list[dic
             if not isinstance(offer, dict):
                 continue
             source_url = str(offer.get("url", "")).strip()
+            if not _is_olx_url(source_url):
+                continue
             source_listing_id = _extract_olx_listing_id(source_url)
             if not source_listing_id or source_listing_id in seen_ids:
                 continue
@@ -240,7 +248,17 @@ def _parse_jsonld_offers(tree: HTMLParser, *, page_city: str | None) -> list[dic
     return listings
 
 
+def _is_olx_url(url: str) -> bool:
+    """Accept absolute olx.pl URLs (any subdomain) and site-relative paths only."""
+    if not url or url.startswith("/"):
+        return bool(url)
+    host = (urlparse(url).hostname or "").casefold()
+    return host == "olx.pl" or host.endswith(".olx.pl")
+
+
 def _extract_olx_listing_id(source_url: str) -> str:
+    if not _is_olx_url(source_url):
+        return ""
     marker = "-ID"
     marker_index = source_url.find(marker)
     if marker_index == -1:

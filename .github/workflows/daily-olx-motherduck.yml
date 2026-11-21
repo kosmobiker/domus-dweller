@@ -61,7 +61,11 @@ jobs:
       - name: Parse OLX
         run: make daily-olx-parse DATE=${{ steps.prep.outputs.run_date }} PAGES=${{ steps.prep.outputs.pages }}
 
+      # Enrichment is best-effort: parsed artifacts must still be uploaded and
+      # sunk even if detail-page fetching fails or gets blocked upstream.
       - name: Enrich new listings (detail pages)
+        continue-on-error: true
+        timeout-minutes: 45
         run: make daily-olx-enrich DATE=${{ steps.prep.outputs.run_date }} MD_DATABASE=${{ env.MD_DATABASE }}
 
       - name: Upload parsed artifacts

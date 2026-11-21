@@ -2,8 +2,17 @@ import json
 from pathlib import Path
 
 import httpx
+from curl_cffi.requests.exceptions import HTTPError as CurlHTTPError
+from curl_cffi.requests.models import Response as CurlResponse
 from domus_dweller.sources.olx import enrich
 from domus_dweller.sources.olx.parser import parse_detail_page
+
+
+def _curl_http_error(status_code: int) -> CurlHTTPError:
+    """Build the same exception shape curl_cffi raises for HTTP error responses."""
+    response = CurlResponse()
+    response.status_code = status_code
+    return CurlHTTPError(f"HTTP Error {status_code}: ", 0, response)
 
 
 def test_given_olx_detail_html_when_parsing_then_extra_listing_fields_are_extracted() -> None:
@@ -307,6 +316,142 @@ def test_given_detail_403_when_enriching_then_listing_is_kept_and_processing_con
     assert enriched[1]["source_listing_id"] == "olx-ok"
     assert enriched[1]["area_sqm"] == 37.0
     assert enriched[1]["rooms"] == 2.0
+
+
+def test_given_detail_410_when_enriching_then_listing_is_kept_and_processing_continues(
+    monkeypatch,
+) -> None:
+    # Given
+    gone_listing = {
+        "source": "olx",
+        "source_listing_id": "olx-410",
+        "source_url": "https://www.olx.pl/d/oferta/gone-CID3-ID410.html",
+        "title": "Gone",
+        "seller_segment": "unknown",
+    }
+    second = {
+        "source": "olx",
+        "source_listing_id": "olx-ok",
+        "source_url": "https://www.olx.pl/d/oferta/ok-CID3-ID200.html",
+        "title": "OK",
+        "seller_segment": "unknown",
+    }
+
+    ok_html = """
+    <html><body>
+      <p data-nx-name="P3">Powierzchnia: 37 m²</p>
+      <p data-nx-name="P3">Liczba pokoi: 2</p>
+    </body></html>
+    """
+
+    def _fake_fetch_html(url: str, *_args, **_kwargs) -> str:
+        if "ID410" in url:
+            raise _curl_http_error(410)
+        return ok_html
+
+    monkeypatch.setattr(enrich, "_fetch_html", _fake_fetch_html)
+
+    # When
+    enriched = enrich.enrich_listings(
+        [gone_listing, second],
+        save_html_dir=None,
+        pause_ms=0,
+        timeout_sec=5.0,
+        default_mode="rent",
+    )
+
+    # Then
+    assert len(enriched) == 2
+    assert enriched[0] == gone_listing
+    assert enriched[1]["source_listing_id"] == "olx-ok"
+    assert enriched[1]["area_sqm"] == 37.0
+    assert enriched[1]["rooms"] == 2.0
+
+
+def test_given_permanent_http_error_when_fetching_then_request_is_not_retried() -> None:
+    # Given
+    attempted_urls: list[str] = []
+
+    class _FakeClient:
+        def get(self, url: str, *, timeout: float) -> CurlResponse:
+            attempted_urls.append(url)
+            raise _curl_http_error(410)
+
+    # When
+    try:
+        enrich._fetch_html(
+            "https://www.olx.pl/d/oferta/gone-CID3-ID410.html",
+            _FakeClient(),
+            timeout_sec=0.01,
+        )
+    except CurlHTTPError as exc:
+        # Then
+        assert exc.response is not None
+        assert exc.response.status_code == 410
+    else:
+        raise AssertionError("Expected HTTP 410 to be raised")
+
+    assert attempted_urls == ["https://www.olx.pl/d/oferta/gone-CID3-ID410.html"]
+
+
+def test_given_detail_410_in_cli_when_running_then_job_does_not_fail_and_output_is_written(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    # Given
+    input_path = tmp_path / "olx_rent_all.json"
+    output_path = tmp_path / "olx_rent_all_enriched.json"
+    input_path.write_text(
+        json.dumps(
+            [
+                {
+                    "source": "olx",
+                    "source_listing_id": "olx-410",
+                    "source_url": "https://www.olx.pl/d/oferta/gone-CID3-ID410.html",
+                    "title": "Gone",
+                },
+                {
+                    "source": "olx",
+                    "source_listing_id": "olx-ok",
+                    "source_url": "https://www.olx.pl/d/oferta/ok-CID3-ID200.html",
+                    "title": "OK",
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    def _fake_fetch_html(url: str, *_args, **_kwargs) -> str:
+        if "ID410" in url:
+            raise _curl_http_error(410)
+        return "<html><body><p data-nx-name='P3'>Powierzchnia: 41 m²</p></body></html>"
+
+    monkeypatch.setattr(enrich, "_fetch_html", _fake_fetch_html)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "enrich_olx",
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--pause-ms",
+            "0",
+            "--mode",
+            "rent",
+        ],
+    )
+
+    # When
+    enrich.main()
+
+    # Then
+    enriched = json.loads(output_path.read_text(encoding="utf-8"))
+    assert len(enriched) == 2
+    assert enriched[0]["source_listing_id"] == "olx-410"
+    assert "area_sqm" not in enriched[0]
+    assert enriched[1]["source_listing_id"] == "olx-ok"
+    assert enriched[1]["area_sqm"] == 41.0
 
 
 def test_given_detail_403_in_cli_when_running_then_job_does_not_fail_and_output_is_written(
