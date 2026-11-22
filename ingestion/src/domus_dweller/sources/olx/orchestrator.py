@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import glob
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -11,6 +10,7 @@ from pathlib import Path
 
 from curl_cffi import requests as curl_requests
 
+from domus_dweller.jsonio import write_json_atomic
 from domus_dweller.merge_pages import _merge_unique
 from domus_dweller.sources.olx.parser import parse_search_results
 
@@ -130,14 +130,18 @@ def _crawl_seed(
     raw_dir: Path,
     parsed_dir: Path,
     session: curl_requests.Session | None = None,
-) -> tuple[int, int]:
+) -> tuple[int, int, list[Path]]:
     """Crawl a single seed sequentially up to max_pages.
 
-    Returns (pages_fetched, total_items_extracted).
+    Returns (pages_fetched, total_items_extracted, parsed_files_written). The
+    written paths are returned so the merge step only reads files produced by
+    this run; globbing the date directory would re-merge page files left behind
+    by an earlier attempt for the same date.
     """
     seen_ids: set[str] = set()
     pages_fetched = 0
     total_items = 0
+    written_paths: list[Path] = []
 
     print(f"[OLX {seed.mode}] Seed {seed.seed_name}")
 
@@ -196,10 +200,11 @@ def _crawl_seed(
             json.dumps(listings, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
+        written_paths.append(parsed_path)
         total_items += len(listings)
         print(f"Wrote {len(listings)} parsed listings to {parsed_path}")
 
-    return pages_fetched, total_items
+    return pages_fetched, total_items, written_paths
 
 
 def run_crawl(
@@ -224,11 +229,12 @@ def run_crawl(
     )
 
     total_pages_fetched = 0
+    written_paths: list[Path] = []
 
     if workers <= 1:
         with curl_requests.Session(impersonate="chrome120") as session:
             for seed in seeds:
-                pages, _ = _crawl_seed(
+                pages, _, paths = _crawl_seed(
                     seed,
                     max_pages=max_pages,
                     raw_dir=raw_dir,
@@ -236,35 +242,36 @@ def run_crawl(
                     session=session,
                 )
                 total_pages_fetched += pages
+                written_paths.extend(paths)
     else:
 
-        def _worker_task(seed: Seed) -> int:
+        def _worker_task(seed: Seed) -> tuple[int, list[Path]]:
             with curl_requests.Session(impersonate="chrome120") as session:
-                pages, _ = _crawl_seed(
+                pages, _, paths = _crawl_seed(
                     seed,
                     max_pages=max_pages,
                     raw_dir=raw_dir,
                     parsed_dir=parsed_dir,
                     session=session,
                 )
-                return pages
+                return pages, paths
 
         with ThreadPoolExecutor(max_workers=workers) as executor:
             future_to_seed = {executor.submit(_worker_task, seed): seed for seed in seeds}
             for future in as_completed(future_to_seed):
                 try:
-                    pages = future.result()
+                    pages, paths = future.result()
                     total_pages_fetched += pages
+                    written_paths.extend(paths)
                 except Exception as exc:
                     seed = future_to_seed[future]
                     print(f"[OLX {mode}] Worker failed for seed {seed.seed_name}: {exc}")
 
     print(f"[OLX {mode}] Merge search pages")
-    pattern = str(parsed_dir / f"olx_{mode}_*_page_*.json")
     all_rows: list[dict] = []
-    for file_path in sorted(glob.glob(pattern)):
+    for file_path in sorted(written_paths):
         try:
-            payload = json.loads(Path(file_path).read_text(encoding="utf-8"))
+            payload = json.loads(file_path.read_text(encoding="utf-8"))
             if isinstance(payload, list):
                 all_rows.extend(payload)
         except Exception as exc:
@@ -272,10 +279,7 @@ def run_crawl(
 
     merged = _merge_unique(all_rows)
     merged_output = parsed_dir / f"olx_{mode}_all.json"
-    merged_output.write_text(
-        json.dumps(merged, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    write_json_atomic(merged_output, merged)
     print(f"Wrote {len(merged)} unique listings to {merged_output}")
     print(f"Finished OLX {mode} run for {snapshot_date}")
 
