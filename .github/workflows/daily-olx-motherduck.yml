@@ -18,7 +18,11 @@ on:
 env:
   MD_DATABASE: my_db
   MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
-  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+# Prevent a delayed scheduled run from overlapping the next day's run.
+concurrency:
+  group: daily-olx-motherduck
+  cancel-in-progress: false
 
 jobs:
   parse:
@@ -32,6 +36,8 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -65,7 +71,7 @@ jobs:
       # sunk even if detail-page fetching fails or gets blocked upstream.
       - name: Enrich new listings (detail pages)
         continue-on-error: true
-        timeout-minutes: 45
+        timeout-minutes: 60
         run: make daily-olx-enrich DATE=${{ steps.prep.outputs.run_date }} MD_DATABASE=${{ env.MD_DATABASE }}
 
       - name: Upload parsed artifacts
@@ -85,6 +91,8 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -115,6 +123,8 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Set up Python
         uses: actions/setup-python@v5

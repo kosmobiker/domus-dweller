@@ -267,3 +267,47 @@ def test_orchestrator_cli_execution_both_modes(monkeypatch, tmp_path: Path) -> N
 
     assert (parsed_dir / "olx_rent_all.json").exists()
     assert (parsed_dir / "olx_sale_all.json").exists()
+
+
+def test_orchestrator_ignores_stale_page_files_from_previous_runs(tmp_path: Path) -> None:
+    # Given: a page file left over from an earlier attempt for the same date.
+    raw_dir = tmp_path / "raw"
+    parsed_dir = tmp_path / "parsed"
+    parsed_dir.mkdir(parents=True)
+    stale_file = parsed_dir / "olx_rent_mieszkania_krakow_page_1.json"
+    stale_file.write_text(
+        json.dumps(
+            [
+                {
+                    "source": "olx",
+                    "source_listing_id": "olx-STALE",
+                    "source_url": "https://www.otodom.pl/oferta/stale-ID1",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    def _fake_fetch(url: str, session: MagicMock | None = None) -> str:
+        if "page=1" in url:
+            return _sample_page_html(["FRESH"])
+        return "<html><body><section></section></body></html>"
+
+    # When
+    with patch.object(orchestrator, "fetch_page", side_effect=_fake_fetch):
+        summary = orchestrator.run_crawl(
+            mode="rent",
+            cities=["krakow"],
+            property_types=["mieszkania"],
+            max_pages=2,
+            workers=1,
+            raw_dir=raw_dir,
+            parsed_dir=parsed_dir,
+            snapshot_date="2026-11-21",
+        )
+
+    # Then: only rows parsed during this run are merged.
+    merged = json.loads((parsed_dir / "olx_rent_all.json").read_text(encoding="utf-8"))
+    assert summary.total_unique_listings == 1
+    assert {row["source_listing_id"] for row in merged} == {"olx-FRESH"}
+    assert stale_file.exists()

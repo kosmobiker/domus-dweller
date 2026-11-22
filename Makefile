@@ -25,6 +25,9 @@ data:
 verify: lint test
 
 WORKERS ?= 4
+# Detail-page workers share one global request rate (--pause-ms), so raising this
+# hides latency without making the crawl more aggressive.
+ENRICH_WORKERS ?= 8
 
 daily-olx-rent:
 	uv run python -m domus_dweller.sources.olx.orchestrator --mode rent --date "$(DATE)" --pages "$(PAGES)" --cities "$(CITIES)" --workers "$(WORKERS)"
@@ -43,12 +46,14 @@ daily-olx-enrich:
 		--output data/parsed/$(DATE)/olx_rent_all.json \
 		--mode rent \
 		--only-new \
+		--workers "$(ENRICH_WORKERS)" \
 		--database "$(MD_DATABASE)"
 	uv run python -m domus_dweller.sources.olx.enrich \
 		--input data/parsed/$(DATE)/olx_sale_all.json \
 		--output data/parsed/$(DATE)/olx_sale_all.json \
 		--mode sale \
 		--only-new \
+		--workers "$(ENRICH_WORKERS)" \
 		--database "$(MD_DATABASE)"
 
 daily-olx-sink-motherduck:

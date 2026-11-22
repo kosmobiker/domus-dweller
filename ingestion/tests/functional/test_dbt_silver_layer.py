@@ -1,7 +1,9 @@
 import json
 import os
+import shutil
 import subprocess
 from datetime import datetime
+from pathlib import Path
 
 import duckdb
 from domus_dweller.sinks.motherduck_bootstrap import bootstrap_motherduck
@@ -80,6 +82,24 @@ def _insert_bronze_row(con, listing_id, mode, date, raw_json, table="rent_bronze
     )
 
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+_TRANSFORM_IGNORE = shutil.ignore_patterns("target", "logs", "dbt_packages", "__pycache__")
+
+
+def _isolated_transform(tmp_path: Path) -> str:
+    """Copy the dbt project so repeated dbt runs cannot share `target/` state.
+
+    dbt writes `target/manifest.json` and `partial_parse.msgpack` into the project
+    directory. Reusing one directory across tests intermittently produced
+    "unable to infer all dependencies" compilation errors for every model that
+    used `ref()`, which made `make verify` flaky.
+    """
+    destination = tmp_path / "transform"
+    if not destination.exists():
+        shutil.copytree(REPO_ROOT / "transform", destination, ignore=_TRANSFORM_IGNORE)
+    return str(destination)
+
+
 def test_dbt_silver_layer(tmp_path):
     """Full SCD versioning test with realistic data including amenity fields.
 
@@ -101,7 +121,7 @@ def test_dbt_silver_layer(tmp_path):
     # 3. Seed history
     env = os.environ.copy()
     env["DEV_DB"] = db_path
-    cwd = os.path.join(os.getcwd(), "transform")
+    cwd = _isolated_transform(tmp_path)
     subprocess.run(["uv", "run", "dbt", "deps"], check=True, cwd=cwd, env=env)
     subprocess.run(
         ["uv", "run", "dbt", "run-operation", "seed_silver_history", "--target", "dev"],
@@ -131,7 +151,7 @@ def test_dbt_silver_layer(tmp_path):
     env = os.environ.copy()
     env["DEV_DB"] = db_path
 
-    cwd = os.path.join(os.getcwd(), "transform")
+    cwd = _isolated_transform(tmp_path)
     subprocess.run(["uv", "run", "dbt", "deps"], check=True, cwd=cwd, env=env)
     subprocess.run(["uv", "run", "dbt", "build", "--target", "dev"], check=True, cwd=cwd, env=env)
 
@@ -288,7 +308,7 @@ def test_silver_enriches_missing_districts_for_rent_and_sale(tmp_path):
 
     env = os.environ.copy()
     env["DEV_DB"] = db_path
-    cwd = os.path.join(os.getcwd(), "transform")
+    cwd = _isolated_transform(tmp_path)
     subprocess.run(["uv", "run", "dbt", "deps"], check=True, cwd=cwd, env=env)
     subprocess.run(["uv", "run", "dbt", "build", "--target", "dev"], check=True, cwd=cwd, env=env)
 
@@ -372,7 +392,7 @@ def test_silver_tracks_rent_additional_and_building_type(tmp_path):
 
     env = os.environ.copy()
     env["DEV_DB"] = db_path
-    cwd = os.path.join(os.getcwd(), "transform")
+    cwd = _isolated_transform(tmp_path)
     subprocess.run(["uv", "run", "dbt", "deps"], check=True, cwd=cwd, env=env)
     subprocess.run(["uv", "run", "dbt", "build", "--target", "dev"], check=True, cwd=cwd, env=env)
 

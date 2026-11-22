@@ -1,7 +1,9 @@
 import json
+import time
 from pathlib import Path
 
 import httpx
+import pytest
 from curl_cffi.requests.exceptions import HTTPError as CurlHTTPError
 from curl_cffi.requests.models import Response as CurlResponse
 from domus_dweller.sources.olx import enrich
@@ -664,9 +666,11 @@ def test_fetch_existing_listing_ids_from_duckdb(tmp_path: Path) -> None:
     ids = enrich.fetch_existing_listing_ids(database=db_path)
     assert ids == {"id-100", "id-200", "id-300"}
 
-    # Test failure fallback
-    fallback_ids = enrich.fetch_existing_listing_ids(database="/non/existent/path.duckdb")
-    assert fallback_ids == set()
+
+def test_given_unreachable_database_when_fetching_existing_ids_then_error_is_raised() -> None:
+    # A silent empty set here would turn --only-new into a full re-crawl.
+    with pytest.raises(enrich.EnrichmentDatabaseError):
+        enrich.fetch_existing_listing_ids(database="/non/existent/path.duckdb")
 
 
 def test_enrich_cli_with_only_new_flag(monkeypatch, tmp_path: Path) -> None:
@@ -675,8 +679,14 @@ def test_enrich_cli_with_only_new_flag(monkeypatch, tmp_path: Path) -> None:
     input_path.write_text(
         json.dumps(
             [
-                {"source_listing_id": "old-1", "source_url": "https://example.com/1"},
-                {"source_listing_id": "new-2", "source_url": "https://example.com/2"},
+                {
+                    "source_listing_id": "old-1",
+                    "source_url": "https://www.olx.pl/d/oferta/old-1.html",
+                },
+                {
+                    "source_listing_id": "new-2",
+                    "source_url": "https://www.olx.pl/d/oferta/new-2.html",
+                },
             ]
         ),
         encoding="utf-8",
@@ -710,3 +720,185 @@ def test_enrich_cli_with_only_new_flag(monkeypatch, tmp_path: Path) -> None:
     assert len(res) == 2
     assert "area_sqm" not in res[0]
     assert res[1]["area_sqm"] == 50.0
+
+
+def test_given_offsite_url_when_enriching_then_no_request_is_made(monkeypatch) -> None:
+    # Given: OLX search pages can contain cross-site promo cards (e.g. Otodom).
+    listings = [
+        {
+            "source_listing_id": "otodom-1",
+            "source_url": "https://www.otodom.pl/oferta/room-ID4E54V",
+        },
+        {
+            "source_listing_id": "olx-1",
+            "source_url": "https://www.olx.pl/d/oferta/ok-ID1.html",
+        },
+    ]
+    fetched: list[str] = []
+
+    def _fake_fetch_html(url: str, *_args, **_kwargs) -> str:
+        fetched.append(url)
+        return "<html><body><p data-nx-name='P3'>Powierzchnia: 30 m²</p></body></html>"
+
+    monkeypatch.setattr(enrich, "_fetch_html", _fake_fetch_html)
+
+    # When
+    enriched = enrich.enrich_listings(
+        listings,
+        save_html_dir=None,
+        pause_ms=0,
+        timeout_sec=5.0,
+        default_mode="rent",
+        workers=2,
+    )
+
+    # Then
+    assert fetched == ["https://www.olx.pl/d/oferta/ok-ID1.html"]
+    assert len(enriched) == 2
+    assert "area_sqm" not in enriched[0]
+    assert enriched[1]["area_sqm"] == 30.0
+
+
+def test_given_multiple_workers_when_enriching_then_input_order_is_preserved(
+    monkeypatch,
+) -> None:
+    # Given: later listings respond faster, so completion order != input order.
+    listings = [
+        {
+            "source_listing_id": f"id{index}",
+            "source_url": f"https://www.olx.pl/d/oferta/{index}.html",
+        }
+        for index in range(12)
+    ]
+
+    def _fake_fetch_html(url: str, *_args, **_kwargs) -> str:
+        index = int(url.rsplit("/", 1)[-1].split(".")[0])
+        time.sleep(0.005 * (12 - index))
+        return f"<html><body><p data-nx-name='P3'>Powierzchnia: {index + 10} m²</p></body></html>"
+
+    monkeypatch.setattr(enrich, "_fetch_html", _fake_fetch_html)
+
+    # When
+    enriched = enrich.enrich_listings(
+        listings,
+        save_html_dir=None,
+        pause_ms=0,
+        timeout_sec=5.0,
+        default_mode="rent",
+        workers=6,
+    )
+
+    # Then
+    assert [row["source_listing_id"] for row in enriched] == [f"id{index}" for index in range(12)]
+    assert [row["area_sqm"] for row in enriched] == [float(index + 10) for index in range(12)]
+
+
+def test_given_pause_ms_when_enriching_then_rate_limit_is_global_across_workers(
+    monkeypatch,
+) -> None:
+    # Given: 4 listings, 4 workers, but one shared 120ms request interval.
+    listings = [
+        {
+            "source_listing_id": f"id{index}",
+            "source_url": f"https://www.olx.pl/d/oferta/{index}.html",
+        }
+        for index in range(4)
+    ]
+
+    def _fake_fetch_html(url: str, *_args, **_kwargs) -> str:
+        return "<html><body><p data-nx-name='P3'>Powierzchnia: 10 m²</p></body></html>"
+
+    monkeypatch.setattr(enrich, "_fetch_html", _fake_fetch_html)
+
+    # When
+    started = time.monotonic()
+    enriched = enrich.enrich_listings(
+        listings,
+        save_html_dir=None,
+        pause_ms=120,
+        timeout_sec=5.0,
+        default_mode="rent",
+        workers=4,
+    )
+    elapsed = time.monotonic() - started
+
+    # Then: 4 requests need at least 3 intervals of 120ms.
+    assert len(enriched) == 4
+    assert elapsed >= 0.30
+
+
+def test_given_same_input_and_output_path_when_enriching_then_file_is_replaced_atomically(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    # Given: the daily Makefile target rewrites its own input file in place.
+    path = tmp_path / "olx_rent_all.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "source_listing_id": "olx-1",
+                    "source_url": "https://www.olx.pl/d/oferta/one-ID1.html",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    def _fake_fetch_html(*_args, **_kwargs) -> str:
+        return "<html><body><p data-nx-name='P3'>Powierzchnia: 42 m²</p></body></html>"
+
+    monkeypatch.setattr(enrich, "_fetch_html", _fake_fetch_html)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "enrich_olx",
+            "--input",
+            str(path),
+            "--output",
+            str(path),
+            "--mode",
+            "rent",
+            "--pause-ms",
+            "0",
+        ],
+    )
+
+    # When
+    enrich.main()
+
+    # Then
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    assert rows[0]["area_sqm"] == 42.0
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_given_unreachable_database_when_running_only_new_then_job_exits_nonzero(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    # Given
+    input_path = tmp_path / "olx_rent_all.json"
+    input_path.write_text(
+        json.dumps([{"source_listing_id": "olx-1", "source_url": "https://www.olx.pl/x"}]),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "enrich_olx",
+            "--input",
+            str(input_path),
+            "--output",
+            str(tmp_path / "out.json"),
+            "--only-new",
+            "--database",
+            "/non/existent/path.duckdb",
+        ],
+    )
+
+    # When / Then
+    with pytest.raises(SystemExit) as excinfo:
+        enrich.main()
+    assert excinfo.value.code == 2
+    assert not (tmp_path / "out.json").exists()

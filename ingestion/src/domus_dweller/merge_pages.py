@@ -5,6 +5,8 @@ import glob
 import json
 from pathlib import Path
 
+from domus_dweller.jsonio import write_json_atomic
+
 
 def _build_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -35,11 +37,7 @@ def main() -> None:
         if isinstance(payload, list):
             rows.extend(payload)
     merged = _merge_unique(rows)
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(
-        json.dumps(merged, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    write_json_atomic(args.output, merged)
     print(f"Wrote {len(merged)} unique listings to {args.output}")
 
 
